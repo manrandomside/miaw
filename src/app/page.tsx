@@ -32,7 +32,8 @@ import {
   VolumeX,
 } from "lucide-react"
 
-const ESP32_BASE_URL = "http://192.168.254.156"
+// All ESP32 communication now goes through server-side proxies:
+// /api/telemetry for sensor data, /api/esp32 for actions
 
 interface ChatMessage {
   role: "user" | "miaw"
@@ -43,7 +44,7 @@ interface ChatMessage {
 
 export default function Home() {
   const { playClick, playPop } = useSFX()
-  const { data: telemetry, isError: telemetryError } = useTelemetry()
+  const { data: telemetry, isError: telemetryError, isOffline: telemetryOffline } = useTelemetry()
   const [activeView, setActiveView] = useState<"dashboard" | "lyrics">("dashboard")
   
   const [activeMiawState, setActiveMiawState] = useState<keyof typeof STATES>("idleCalm")
@@ -82,22 +83,21 @@ export default function Home() {
   // Speech Synthesis (TTS) State
   const [isMuted, setIsMuted] = useState(false)
   const [ttsSupported, setTtsSupported] = useState(true)
+  const [voicesLoaded, setVoicesLoaded] = useState(false)
   const isSpeakingRef = useRef(false)
 
   // Sync state to ESP32 OLED
   useEffect(() => {
-    fetch(`${ESP32_BASE_URL}/state`, {
+    fetch(`/api/esp32?endpoint=/state&method=POST`, {
       method: "POST",
-      mode: "no-cors",
       body: activeMiawState
     }).catch(() => {}) // Ignore errors if ESP32 is offline
   }, [activeMiawState])
 
   // Sync dashboard visibility to ESP32
   useEffect(() => {
-    fetch(`${ESP32_BASE_URL}/dash`, {
+    fetch(`/api/esp32?endpoint=/dash&method=POST`, {
       method: "POST",
-      mode: "no-cors",
       body: showDashboard ? "1" : "0"
     }).catch(() => {})
   }, [showDashboard])
@@ -176,6 +176,19 @@ export default function Home() {
 
       if (!("speechSynthesis" in window)) {
         setTtsSupported(false)
+      } else {
+        // Voices load asynchronously in most browsers.
+        // Listen for the voiceschanged event to know when they're ready.
+        const synth = window.speechSynthesis
+        const loadVoices = () => {
+          const voices = synth.getVoices()
+          if (voices.length > 0) {
+            setVoicesLoaded(true)
+          }
+        }
+        loadVoices() // Try immediately (works in Firefox)
+        synth.addEventListener("voiceschanged", loadVoices)
+        return () => synth.removeEventListener("voiceschanged", loadVoices)
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -218,12 +231,11 @@ export default function Home() {
 
   const dispatchESP32Action = useCallback(async (endpoint: string, method: string) => {
     try {
-      await fetch(`${ESP32_BASE_URL}${endpoint}`, {
-        method,
-        mode: "no-cors",
+      await fetch(`/api/esp32?endpoint=${encodeURIComponent(endpoint)}&method=${method}`, {
+        method: "POST",
       })
     } catch {
-      // ESP32 may be unreachable in dev; silently fail
+      // ESP32 may be unreachable; silently fail
     }
   }, [])
 
@@ -237,9 +249,8 @@ export default function Home() {
     }
     const endpoint = endpoints[lampId]
     try {
-      await fetch(`${ESP32_BASE_URL}${endpoint}`, {
+      await fetch(`/api/esp32?endpoint=${encodeURIComponent(endpoint)}&method=POST`, {
         method: "POST",
-        mode: "no-cors",
       })
     } catch (err) {
       console.warn(`Manual toggle failed for ${lampId}:`, err)
@@ -291,12 +302,21 @@ export default function Home() {
       synth.cancel() // Stop any current speech
       const utterance = new SpeechSynthesisUtterance(text)
       
+      // Get voices — they should be loaded by now thanks to voiceschanged listener
       const voices = synth.getVoices()
       const idVoices = voices.filter(v => v.lang.includes("id"))
+      
+      // Prefer Google Indonesian voice for consistent, high-quality output
       const googleVoice = idVoices.find(v => v.name.toLowerCase().includes("google"))
+      // Fallback: any female Indonesian voice
+      const femaleVoice = idVoices.find(v =>
+        v.name.toLowerCase().includes("female") || v.name.toLowerCase().includes("wanita")
+      )
       
       if (googleVoice) {
         utterance.voice = googleVoice
+      } else if (femaleVoice) {
+        utterance.voice = femaleVoice
       } else if (idVoices.length > 0) {
         utterance.voice = idVoices[0]
       }
@@ -345,7 +365,7 @@ export default function Home() {
       resetInactivityTimers()
       restartMicAfterSpeech()
     }
-  }, [isMuted, ttsSupported, resetInactivityTimers, playPop, ttsPitch, ttsRate, restartMicAfterSpeech])
+  }, [isMuted, ttsSupported, voicesLoaded, resetInactivityTimers, playPop, ttsPitch, ttsRate, restartMicAfterSpeech])
 
   const handleSendMessage = useCallback(async (overrideMessage?: string) => {
     const message = (overrideMessage || chatInput).trim()
@@ -805,6 +825,16 @@ export default function Home() {
               </h2>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                {/* ESP32 Offline Banner */}
+                {telemetryOffline && (
+                  <div className="md:col-span-3 border-[3px] border-black bg-[#fbbf24] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center gap-3">
+                    <ShieldAlert className="size-5 text-black shrink-0" />
+                    <span className="font-bold text-sm text-black">
+                      ESP32 tidak terjangkau. Pastikan ESP32 menyala dan terhubung ke jaringan WiFi yang sama dengan server.
+                    </span>
+                  </div>
+                )}
+
                 {/* Climate Card */}
                 <div className="border-[4px] border-black bg-[#a78bfa] p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] dark:bg-purple-900 dark:text-white flex flex-col justify-between">
                   <div>
@@ -815,14 +845,18 @@ export default function Home() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="border-[3px] border-black bg-white p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] dark:bg-zinc-800">
                         <div className="text-xs font-black uppercase text-zinc-500 dark:text-zinc-400">Temp</div>
-                        <div className="text-2xl sm:text-3xl font-black text-black dark:text-white">
-                          {telemetryError || !telemetry ? "ERR" : `${telemetry.temperature.toFixed(1)} \u00b0C`}
+                        <div className={`text-2xl sm:text-3xl font-black ${telemetryError || !telemetry ? "text-red-500" : "text-black dark:text-white"}`}>
+                          {telemetryError || !telemetry
+                            ? (telemetryOffline ? "OFFLINE" : "ERR")
+                            : `${telemetry.temperature.toFixed(1)} \u00b0C`}
                         </div>
                       </div>
                       <div className="border-[3px] border-black bg-white p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] dark:bg-zinc-800">
                         <div className="text-xs font-black uppercase text-zinc-500 dark:text-zinc-400">Humidity</div>
-                        <div className="text-2xl sm:text-3xl font-black text-black dark:text-white">
-                          {telemetryError || !telemetry ? "---" : `${telemetry.humidity.toFixed(1)} %`}
+                        <div className={`text-2xl sm:text-3xl font-black ${telemetryError || !telemetry ? "text-red-500" : "text-black dark:text-white"}`}>
+                          {telemetryError || !telemetry
+                            ? (telemetryOffline ? "OFFLINE" : "---")
+                            : `${telemetry.humidity.toFixed(1)} %`}
                         </div>
                       </div>
                     </div>
@@ -839,14 +873,18 @@ export default function Home() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="border-[3px] border-black bg-white p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] dark:bg-zinc-800">
                         <div className="text-xs font-black uppercase text-zinc-500 dark:text-zinc-400">Intensity</div>
-                        <div className="text-2xl sm:text-3xl font-black text-black dark:text-white">
-                          {telemetryError || !telemetry ? "ERR" : `${telemetry.ldr} lx`}
+                        <div className={`text-2xl sm:text-3xl font-black ${telemetryError || !telemetry ? "text-red-500" : "text-black dark:text-white"}`}>
+                          {telemetryError || !telemetry
+                            ? (telemetryOffline ? "OFFLINE" : "ERR")
+                            : `${telemetry.ldr} lx`}
                         </div>
                       </div>
                       <div className="border-[3px] border-black bg-white p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] dark:bg-zinc-800">
                         <div className="text-xs font-black uppercase text-zinc-500 dark:text-zinc-400">Auto Mode</div>
-                        <div className="text-lg sm:text-xl font-black uppercase pt-1 text-green-600 dark:text-green-400">
-                          {telemetryError || !telemetry ? "ERR" : "Active"}
+                        <div className={`text-lg sm:text-xl font-black uppercase pt-1 ${telemetryError || !telemetry ? "text-red-500" : "text-green-600 dark:text-green-400"}`}>
+                          {telemetryError || !telemetry
+                            ? (telemetryOffline ? "OFFLINE" : "ERR")
+                            : "Active"}
                         </div>
                       </div>
                     </div>
