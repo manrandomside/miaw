@@ -481,29 +481,31 @@ export default function Home() {
       {/* Navigation */}
       <header className="border-b-[4px] border-black bg-white dark:bg-zinc-900 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-[#ffde43] border-[3px] border-black p-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-              <Cpu className="size-6 text-black" />
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div className="bg-black border-[3px] border-black p-0.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] w-10 h-10 flex items-center justify-center overflow-hidden">
+              <div className="w-[120%] h-[120%] text-[#9ee2ff] flex items-center justify-center">
+                <Miaw state={activeMiawState} animSpeed={animSpeed} animate={animate} />
+              </div>
             </div>
-            <span className="font-black text-xl tracking-wider uppercase text-black dark:text-white">Miaw // Hub</span>
+            <span className="font-black text-lg sm:text-xl tracking-wider uppercase text-black dark:text-white hidden min-[380px]:inline-block">Miaw // Hub</span>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5 sm:gap-4 shrink-0">
             {activeView === "dashboard" ? (
               <Button
                 onClick={() => setActiveView("lyrics")}
                 className="flex items-center gap-2 border-[3px] border-black bg-[#60a5fa] px-4 py-2 text-sm font-black uppercase text-black hover:bg-[#3b82f6] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
               >
-                <Headphones className="size-4" />
-                Open Miaw Lyrics
+                <Headphones className="size-4 sm:mr-1" />
+                <span className="hidden sm:inline">Open Miaw Lyrics</span>
               </Button>
             ) : (
               <Button
                 onClick={() => setActiveView("dashboard")}
                 className="flex items-center gap-2 border-[3px] border-black bg-[#ffde43] px-4 py-2 text-sm font-black uppercase text-black hover:bg-[#fcd34d] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
               >
-                <ArrowLeft className="size-4" />
-                Back to Dashboard
+                <ArrowLeft className="size-4 sm:mr-1" />
+                <span className="hidden sm:inline">Back to Dashboard</span>
               </Button>
             )}
 
