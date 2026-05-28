@@ -9,6 +9,7 @@ import { useTelemetry } from "@/hooks/useTelemetry"
 import { useScheduler } from "@/hooks/useScheduler"
 import { useSFX } from "@/hooks/useSFX"
 import { supabase } from "@/lib/supabaseClient"
+import { isLocalMode } from "@/lib/connectionMode"
 import Webcam from "react-webcam"
 import {
   Camera,
@@ -89,20 +90,34 @@ export default function Home() {
   const [voicesLoaded, setVoicesLoaded] = useState(false)
   const isSpeakingRef = useRef(false)
 
-  // Sync state to ESP32 OLED
+  // Sync state to ESP32 OLED (Hybrid)
   useEffect(() => {
-    supabase.from("miaw_commands").insert({
-      endpoint: `/state?val=${activeMiawState}`,
-      status: "pending"
-    }).then()
+    if (isLocalMode()) {
+      fetch(`/api/esp32?endpoint=/state&method=POST`, {
+        method: "POST",
+        body: activeMiawState
+      }).catch(() => {})
+    } else {
+      supabase.from("miaw_commands").insert({
+        endpoint: `/state?val=${activeMiawState}`,
+        status: "pending"
+      }).then()
+    }
   }, [activeMiawState])
 
-  // Sync dashboard visibility to ESP32
+  // Sync dashboard visibility to ESP32 (Hybrid)
   useEffect(() => {
-    supabase.from("miaw_commands").insert({
-      endpoint: `/dash?val=${showDashboard ? "1" : "0"}`,
-      status: "pending"
-    }).then()
+    if (isLocalMode()) {
+      fetch(`/api/esp32?endpoint=/dash&method=POST`, {
+        method: "POST",
+        body: showDashboard ? "1" : "0"
+      }).catch(() => {})
+    } else {
+      supabase.from("miaw_commands").insert({
+        endpoint: `/dash?val=${showDashboard ? "1" : "0"}`,
+        status: "pending"
+      }).then()
+    }
   }, [showDashboard])
 
   // Fetch Memories on Mount
@@ -234,10 +249,16 @@ export default function Home() {
 
   const dispatchESP32Action = useCallback(async (endpoint: string, method: string) => {
     try {
-      await supabase.from("miaw_commands").insert({
-        endpoint,
-        status: "pending"
-      })
+      if (isLocalMode()) {
+        await fetch(`/api/esp32?endpoint=${encodeURIComponent(endpoint)}&method=${method}`, {
+          method: "POST",
+        })
+      } else {
+        await supabase.from("miaw_commands").insert({
+          endpoint,
+          status: "pending"
+        })
+      }
     } catch {
       // ESP32 may be unreachable; silently fail
     }
@@ -253,10 +274,16 @@ export default function Home() {
     }
     const endpoint = endpoints[lampId]
     try {
-      await supabase.from("miaw_commands").insert({
-        endpoint,
-        status: "pending"
-      })
+      if (isLocalMode()) {
+        await fetch(`/api/esp32?endpoint=${encodeURIComponent(endpoint)}&method=POST`, {
+          method: "POST",
+        })
+      } else {
+        await supabase.from("miaw_commands").insert({
+          endpoint,
+          status: "pending"
+        })
+      }
     } catch (err) {
       console.warn(`Manual toggle failed for ${lampId}:`, err)
     }
