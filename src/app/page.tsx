@@ -127,6 +127,10 @@ export default function Home() {
           const rawTranscript = lastResult[0].transcript.trim()
           if (!rawTranscript) return
           
+          // Immediately stop mic to prevent feedback loop (mic picking up TTS)
+          isSpeakingRef.current = true
+          try { recognitionRef.current.stop() } catch (e) {}
+          
           setChatInput(rawTranscript)
           handleSendMessage(rawTranscript)
         }
