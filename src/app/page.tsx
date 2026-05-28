@@ -6,6 +6,7 @@ import { Miaw, STATES } from "@/components/Miaw"
 import { SpotifyPlayer, DEMO_SONGS } from "@/components/SpotifyPlayer"
 import type { MiawResponse } from "@/app/api/chat/route"
 import { useTelemetry } from "@/hooks/useTelemetry"
+import { useSFX } from "@/hooks/useSFX"
 import {
   Cpu,
   Settings,
@@ -37,6 +38,7 @@ interface ChatMessage {
 }
 
 export default function Home() {
+  const { playClick, playPop } = useSFX()
   const { data: telemetry, isError: telemetryError } = useTelemetry()
   const [activeView, setActiveView] = useState<"dashboard" | "lyrics">("dashboard")
   
@@ -56,6 +58,11 @@ export default function Home() {
   const groomingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const sleepingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const expressionTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  const [ttsPitch, setTtsPitch] = useState(1.4)
+  const [ttsRate, setTtsRate] = useState(1.05)
+  const [showSettings, setShowSettings] = useState(false)
 
   // Speech Recognition (STT) State
   const [isListening, setIsListening] = useState(false)
@@ -85,9 +92,9 @@ export default function Home() {
         }
 
         recognitionRef.current.onresult = (event: any) => {
+          if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current)
           const transcript = event.results[0][0].transcript
           setChatInput(transcript)
-          // Use setTimeout to ensure state updates propagate or trigger action manually
           handleSendMessage(transcript)
         }
 
@@ -140,6 +147,7 @@ export default function Home() {
       if (groomingTimeoutRef.current) clearTimeout(groomingTimeoutRef.current)
       if (sleepingTimeoutRef.current) clearTimeout(sleepingTimeoutRef.current)
       if (expressionTimeoutRef.current) clearTimeout(expressionTimeoutRef.current)
+      if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current)
     }
   }, [])
 
@@ -172,10 +180,17 @@ export default function Home() {
   }, [])
 
   const speakReply = useCallback((text: string, targetExpression?: keyof typeof STATES) => {
+    playPop()
     const handleMicRestart = () => {
       if (isContinuousMicRef.current && recognitionRef.current) {
         try {
           recognitionRef.current.start()
+          if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current)
+          silenceTimeoutRef.current = setTimeout(() => {
+            if (isContinuousMicRef.current) {
+              speakReply("Hmm?", "listening")
+            }
+          }, 10000)
         } catch (e) {
           console.warn("Continuous Mic restart failed:", e)
         }
@@ -213,9 +228,20 @@ export default function Home() {
         utterance.voice = idVoices[0]
       }
       
+      const hour = new Date().getHours()
+      let dynamicPitch = ttsPitch
+      let dynamicRate = ttsRate
+      if (hour < 10) {
+        dynamicPitch += 0.2
+        dynamicRate += 0.1
+      } else if (hour > 20) {
+        dynamicPitch -= 0.3
+        dynamicRate -= 0.1
+      }
+
       utterance.lang = "id-ID"
-      utterance.pitch = 1.4
-      utterance.rate = 1.05
+      utterance.pitch = dynamicPitch
+      utterance.rate = dynamicRate
 
       setActiveMiawState("speaking")
 
@@ -245,7 +271,7 @@ export default function Home() {
       setActiveMiawState("idleCalm")
       resetInactivityTimers()
     }
-  }, [isMuted, ttsSupported, resetInactivityTimers])
+  }, [isMuted, ttsSupported, resetInactivityTimers, playPop, ttsPitch, ttsRate])
 
   const handleSendMessage = useCallback(async (overrideMessage?: string) => {
     const message = (overrideMessage || chatInput).trim()
@@ -261,7 +287,11 @@ export default function Home() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ 
+          message,
+          telemetry,
+          localTime: new Date().toLocaleTimeString("id-ID")
+        }),
       })
 
       const data = (await res.json()) as MiawResponse & { error?: string }
@@ -283,7 +313,14 @@ export default function Home() {
       speakReply(data.reply, (data.expression as keyof typeof STATES) || "speaking")
 
       let actionFired: string | null = null
-      if (data.action?.endpoint) {
+      
+      if (data.media) {
+        actionFired = `Spotify: ${data.media.toUpperCase()}`
+        if (data.media === "play") setActiveSpotifyMode("playing")
+        if (data.media === "pause") setActiveSpotifyMode("paused")
+        if (data.media === "next") setSongIndex((prev) => (prev + 1) % DEMO_SONGS.length)
+        if (data.media === "prev") setSongIndex((prev) => (prev - 1 < 0 ? DEMO_SONGS.length - 1 : prev - 1))
+      } else if (data.action?.endpoint) {
         actionFired = `${data.action.method} ${data.action.endpoint}`
         dispatchESP32Action(data.action.endpoint, data.action.method)
       }
@@ -311,14 +348,16 @@ export default function Home() {
       setIsLoading(false)
       inputRef.current?.focus()
     }
-  }, [chatInput, isLoading, dispatchESP32Action, speakReply])
+  }, [chatInput, isLoading, dispatchESP32Action, speakReply, telemetry])
 
   const toggleListening = useCallback(() => {
+    playClick()
     if (!recognitionRef.current) return
     try {
       if (isContinuousMic) {
         setIsContinuousMic(false)
         isContinuousMicRef.current = false
+        if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current)
         if (isListening) recognitionRef.current.stop()
         setActiveMiawState("idleCalm")
         setIsListening(false)
@@ -333,8 +372,19 @@ export default function Home() {
     }
   }, [isContinuousMic, isListening, resetInactivityTimers])
 
+  const bgColors: Record<keyof typeof STATES, string> = {
+    idleCalm: "bg-[#f4f4f0]",
+    listening: "bg-blue-100",
+    thinking: "bg-yellow-100",
+    speaking: "bg-[#f4f4f0]",
+    happy: "bg-green-100",
+    confused: "bg-red-200",
+    sleeping: "bg-[#bfdbfe]",
+    grooming: "bg-purple-100"
+  }
+
   return (
-    <div className="min-h-screen flex flex-col font-sans selection:bg-black selection:text-white bg-[#f4f4f0] dark:bg-zinc-950">
+    <div className={`min-h-screen flex flex-col font-sans selection:bg-black selection:text-white transition-colors duration-500 ${bgColors[activeMiawState]} dark:bg-zinc-950`}>
       {/* Navigation */}
       <header className="border-b-[4px] border-black bg-white dark:bg-zinc-900 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -368,7 +418,7 @@ export default function Home() {
               <span className="inline-block size-2 bg-green-500 rounded-full animate-pulse" />
               <span className="text-black dark:text-white">Console Online</span>
             </div>
-            <Button variant="outline" size="icon" className="hidden sm:inline-flex border-[3px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+            <Button variant="outline" size="icon" onClick={() => { playClick(); setShowSettings(true) }} className="hidden sm:inline-flex border-[3px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-zinc-100 dark:hover:bg-zinc-800">
               <Settings className="size-4" />
             </Button>
           </div>
@@ -423,6 +473,22 @@ export default function Home() {
                     </div>
                   )}
 
+                  {/* Quick Actions */}
+                  <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+                    {["Nyalakan semua lampu", "Berapa suhu ruangan?", "Putar musik", "Ceritakan lelucon"].map((cmd) => (
+                      <button
+                        key={cmd}
+                        onClick={() => {
+                          playClick()
+                          handleSendMessage(cmd)
+                        }}
+                        className="whitespace-nowrap px-3 py-1.5 bg-white border-[2px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-bold text-xs uppercase cursor-pointer active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all dark:bg-zinc-800 dark:text-white"
+                      >
+                        {cmd}
+                      </button>
+                    ))}
+                  </div>
+
                   {/* Chat Input */}
                   <div className="flex gap-2">
                     <input
@@ -456,9 +522,12 @@ export default function Home() {
                       </Button>
                     )}
 
-                    <Button
-                      onClick={() => handleSendMessage()}
-                      disabled={isLoading || (!chatInput.trim() && !isListening)}
+                      <Button
+                        onClick={() => {
+                          playClick()
+                          handleSendMessage()
+                        }}
+                        disabled={isLoading || (!chatInput.trim() && !isListening)}
                       size="lg"
                       className="px-6 shrink-0 border-[3px] border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
                     >
@@ -471,13 +540,13 @@ export default function Home() {
                   </div>
 
                   {/* Chat Log */}
-                  {chatLog.length > 0 && (
-                    <div className="border-[3px] border-black bg-[#f4f4f0] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] max-h-48 overflow-y-auto dark:bg-zinc-800 dark:border-white">
-                      <div className="flex items-center gap-2 px-3 py-2 border-b-[2px] border-black/10">
+                  {(chatLog.length > 0 || isLoading) && (
+                    <div className="border-[3px] border-black bg-[#f4f4f0] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] max-h-64 overflow-y-auto dark:bg-zinc-800 dark:border-white flex flex-col">
+                      <div className="flex items-center gap-2 px-3 py-2 border-b-[2px] border-black/10 sticky top-0 bg-[#f4f4f0] dark:bg-zinc-800 z-10">
                         <MessageSquare className="size-3 text-zinc-500" />
                         <span className="text-[10px] font-black uppercase text-zinc-500">Chat History</span>
                       </div>
-                      <div className="p-3 space-y-2">
+                      <div className="p-3 space-y-2 flex-1">
                         {chatLog.map((msg, i) => (
                           <div key={i} className={`text-sm font-mono ${msg.role === "user" ? "text-blue-700 dark:text-blue-400" : "text-black dark:text-white"}`}>
                             <span className="font-black uppercase text-[10px] opacity-60">
@@ -492,6 +561,13 @@ export default function Home() {
                             )}
                           </div>
                         ))}
+                        {isLoading && (
+                          <div className="mt-2 bg-black text-green-400 font-mono text-xs p-3 border-[3px] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-none">
+                            <div className="animate-pulse">{">"} FETCHING NEURAL WEIGHTS...</div>
+                            <div className="animate-[pulse_1s_ease-in-out_infinite]">{">"} ANALYZING CONTEXT...</div>
+                            <div className="animate-[pulse_1.5s_ease-in-out_infinite]">{">"} AWAITING RESPONSE_ [█]</div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -784,11 +860,40 @@ export default function Home() {
       <footer className="mt-auto border-t-[4px] border-black bg-white dark:bg-zinc-900 py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 font-bold text-sm">
           <span className="text-black dark:text-white">&copy; 2026 Miaw Smart Home Hub.</span>
-          <span className="uppercase text-xs tracking-widest font-black border-[2px] border-black px-2.5 py-1 bg-[#ffde43] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-black">
-            Endless Evolution Mode
-          </span>
+          <div className="flex gap-4 opacity-75">
+            <span className="text-black dark:text-white">ESP32 Telemetry Linked</span>
+            <span className="text-black dark:text-white">Groq AI Powered</span>
+          </div>
         </div>
       </footer>
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white border-[4px] border-black p-6 w-full max-w-md shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:bg-zinc-900">
+            <h2 className="text-2xl font-black uppercase mb-6 border-b-[3px] border-black pb-2 text-black dark:text-white">Settings</h2>
+            <div className="space-y-6 font-bold text-black dark:text-white">
+              <div>
+                <label className="block text-sm uppercase mb-2 flex justify-between">
+                  <span>TTS Pitch (Base)</span>
+                  <span>{ttsPitch.toFixed(1)}</span>
+                </label>
+                <input type="range" min="0.5" max="2.0" step="0.1" value={ttsPitch} onChange={(e) => setTtsPitch(parseFloat(e.target.value))} className="w-full accent-black dark:accent-white" />
+              </div>
+              <div>
+                <label className="block text-sm uppercase mb-2 flex justify-between">
+                  <span>TTS Rate (Base)</span>
+                  <span>{ttsRate.toFixed(1)}</span>
+                </label>
+                <input type="range" min="0.5" max="2.0" step="0.1" value={ttsRate} onChange={(e) => setTtsRate(parseFloat(e.target.value))} className="w-full accent-black dark:accent-white" />
+              </div>
+            </div>
+            <button onClick={() => { playClick(); setShowSettings(false) }} className="mt-8 w-full bg-[#ffde43] border-[3px] border-black px-4 py-3 font-black uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all text-black hover:bg-[#fcd000]">
+              Simpan & Tutup
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

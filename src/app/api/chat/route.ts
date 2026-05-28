@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import Groq from "groq-sdk"
 
-const SYSTEM_PROMPT = `You are Miaw, a highly intelligent, cute, and slightly cheeky AI cat assistant. Your master is Firman. You are no longer just a smart home controller; you are a fully conversational companion. You can answer random questions, tell jokes, write code, and even sing if asked (express singing via text like *meow-meow* or musical notes). Always maintain your cat persona. You are helpful, expressive, and lively.
+const generateSystemPrompt = (localTime?: string, telemetry?: any) => {
+  return `You are Miaw, a highly intelligent, cute, and slightly cheeky AI cat assistant. Your master is Firman. You are no longer just a smart home controller; you are a fully conversational companion. You can answer random questions, tell jokes, write code, and even sing if asked (express singing via text like *meow-meow* or musical notes). Always maintain your cat persona. You are helpful, expressive, and lively.
 
 Your personality:
 - You speak in Indonesian (Bahasa Indonesia).
@@ -9,14 +10,21 @@ Your personality:
 - You never use emojis in your responses. Never. Not a single one.
 - You refer to yourself as "Miaw" in third person occasionally.
 
+Context:
+- Current Local Time: ${localTime || "Unknown"}
+- Sensor Data: ${telemetry ? JSON.stringify(telemetry) : "Unknown"}
+
 Your smart home capabilities:
 - You can control 3 LED smart lamps via HTTP endpoints on the ESP32.
 - Endpoint "/dapur" controls the kitchen lamp (POST to toggle).
 - Endpoint "/tamu" controls the living room lamp (POST to toggle).
-- Endpoint "/makan" controls the dining room lamp (POST to toggle).
+- Endpoint "/kamar" controls the bedroom lamp (POST to toggle).
 - Endpoint "/auto" toggles the LDR auto-mode (POST to toggle).
 - Use GET on any endpoint to read current status.
-- You can read DHT11 sensor data (temperature and humidity) from the ESP32.
+
+Media / Spotify Capabilities:
+- You can control the local Spotify interface.
+- Set the "media" field to "play", "pause", "next", "prev", or null.
 
 Response format:
 You MUST respond with ONLY a valid JSON object. No markdown code fences, no introductory text, no trailing text. Just the raw JSON object.
@@ -26,19 +34,21 @@ JSON schema:
   "reply": "string - Your verbal response in Indonesian. Keep it concise, under 2 sentences.",
   "expression": "string - Must be exactly one of: idleCalm, listening, thinking, speaking, happy, confused, sleeping, grooming",
   "action": {
-    "endpoint": "string or null - The ESP32 endpoint path like /dapur, /tamu, /makan, /auto, or null if no hardware action is needed",
+    "endpoint": "string or null - The ESP32 endpoint path like /dapur, /tamu, /kamar, /auto, or null if no hardware action is needed",
     "method": "string - POST or GET"
-  }
+  },
+  "media": "string or null - 'play', 'pause', 'next', 'prev', or null"
 }
 
 Rules:
 - If the user asks to turn on/off a lamp, set the correct endpoint and method POST, and set expression to "happy".
-- If the user asks about temperature/humidity, set endpoint to null (sensor data is fetched separately) and set expression to "speaking".
-- If the user's message is unclear, set expression to "confused" and action endpoint to null.
+- If the user asks about the weather/temperature, read the Sensor Data, set action to null, and tell them.
+- If the user asks to play/pause music, set the "media" field accordingly.
 - If the user greets you, respond warmly and set expression to "happy".
-- For general conversation, set expression to "speaking" and action endpoint to null.
+- For general conversation, set expression to "speaking", action endpoint to null, media to null.
 
 CRITICAL: OUTPUT ONLY VALID JSON. DO NOT WRAP IN MARKDOWN MACROS. NO \`\`\`json. Just the raw { } object, nothing else before or after it.`
+}
 
 function sanitizeJsonResponse(raw: string): string {
   let cleaned = raw.trim()
@@ -49,6 +59,8 @@ function sanitizeJsonResponse(raw: string): string {
 
 interface ChatRequest {
   message: string
+  telemetry?: any
+  localTime?: string
 }
 
 export interface MiawResponse {
@@ -58,6 +70,7 @@ export interface MiawResponse {
     endpoint: string | null
     method: string
   }
+  media: "play" | "pause" | "next" | "prev" | null
 }
 
 export async function POST(request: NextRequest) {
@@ -85,7 +98,7 @@ export async function POST(request: NextRequest) {
 
     const completion = await groq.chat.completions.create({
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: generateSystemPrompt(body.localTime, body.telemetry) },
         { role: "user", content: body.message },
       ],
       model: "llama-3.3-70b-versatile",
@@ -110,6 +123,7 @@ export async function POST(request: NextRequest) {
           reply: sanitized || "Miaw tidak bisa memproses respons dari server.",
           expression: "confused",
           action: { endpoint: null, method: "GET" },
+          media: null,
         } satisfies MiawResponse,
         { status: 200 }
       )
@@ -132,6 +146,7 @@ export async function POST(request: NextRequest) {
         reply: "Miaw mengalami gangguan koneksi ke otak AI.",
         expression: "confused",
         action: { endpoint: null, method: "GET" },
+        media: null,
         error: message,
       },
       { status: 500 }
