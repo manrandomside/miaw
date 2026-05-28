@@ -6,8 +6,12 @@ import { Miaw, STATES } from "@/components/Miaw"
 import { SpotifyPlayer, DEMO_SONGS } from "@/components/SpotifyPlayer"
 import type { MiawResponse } from "@/app/api/chat/route"
 import { useTelemetry } from "@/hooks/useTelemetry"
+import { useScheduler } from "@/hooks/useScheduler"
 import { useSFX } from "@/hooks/useSFX"
+import { supabase } from "@/lib/supabaseClient"
+import Webcam from "react-webcam"
 import {
+  Camera,
   Cpu,
   Settings,
   Thermometer,
@@ -48,6 +52,9 @@ export default function Home() {
   const [animSpeed, setAnimSpeed] = useState(1.0)
   const [animate, setAnimate] = useState(true)
 
+  const webcamRef = useRef<Webcam>(null)
+  const [isVisionActive, setIsVisionActive] = useState(false)
+
   const [chatInput, setChatInput] = useState("")
   const [chatLog, setChatLog] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -75,6 +82,27 @@ export default function Home() {
   const [isMuted, setIsMuted] = useState(false)
   const [ttsSupported, setTtsSupported] = useState(true)
 
+  // Fetch Memories on Mount
+  useEffect(() => {
+    async function fetchMemories() {
+      const { data, error } = await supabase
+        .from("miaw_memories")
+        .select("*")
+        .order("created_at", { ascending: true })
+        .limit(50)
+      
+      if (!error && data) {
+        setChatLog(data.map((row: any) => ({
+          role: row.role as "user" | "miaw",
+          text: row.text,
+          expression: row.expression,
+          actionFired: row.actionFired
+        })))
+      }
+    }
+    fetchMemories()
+  }, [])
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -88,14 +116,25 @@ export default function Home() {
 
         recognitionRef.current.onstart = () => {
           setIsListening(true)
-          setActiveMiawState("listening")
+          if (!isContinuousMicRef.current) {
+            setActiveMiawState("listening")
+          }
         }
 
         recognitionRef.current.onresult = (event: any) => {
           if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current)
-          const transcript = event.results[0][0].transcript
-          setChatInput(transcript)
-          handleSendMessage(transcript)
+          const rawTranscript = event.results[0][0].transcript
+          const transcript = rawTranscript.toLowerCase()
+          
+          if (isContinuousMicRef.current) {
+            if (transcript.includes("miaw")) {
+              setChatInput(rawTranscript)
+              handleSendMessage(rawTranscript)
+            }
+          } else {
+            setChatInput(rawTranscript)
+            handleSendMessage(rawTranscript)
+          }
         }
 
         recognitionRef.current.onerror = (event: any) => {
@@ -106,6 +145,13 @@ export default function Home() {
 
         recognitionRef.current.onend = () => {
           setIsListening(false)
+          if (isContinuousMicRef.current) {
+            setTimeout(() => {
+              if (isContinuousMicRef.current) {
+                try { recognitionRef.current.start() } catch (e) {}
+              }
+            }, 100)
+          }
         }
       }
 
@@ -161,6 +207,8 @@ export default function Home() {
       // ESP32 may be unreachable in dev; silently fail
     }
   }, [])
+
+  useScheduler(dispatchESP32Action)
 
   const handleManualLampToggle = useCallback(async (lampId: "lamp1" | "lamp2" | "lamp3") => {
     const endpoints = {
@@ -279,18 +327,34 @@ export default function Home() {
 
     setChatInput("")
     setChatLog((prev) => [...prev, { role: "user", text: message }])
+    supabase.from("miaw_memories").insert({ role: "user", text: message }).then()
+    
+    let imageBase64: string | undefined = undefined
+    if (isVisionActive && webcamRef.current) {
+      const screenshot = webcamRef.current.getScreenshot()
+      if (screenshot) imageBase64 = screenshot
+    }
+
     setActiveMiawState("thinking")
     setIsLoading(true)
     setLastReply(null)
 
     try {
+      // Ambil 10 pesan terakhir dari chatLog untuk konteks AI
+      const recentHistory = chatLog.slice(-10).map(msg => ({
+        role: msg.role === "miaw" ? "assistant" : "user",
+        content: msg.text
+      }))
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           message,
           telemetry,
-          localTime: new Date().toLocaleTimeString("id-ID")
+          localTime: new Date().toLocaleTimeString("id-ID"),
+          imageBase64,
+          history: recentHistory
         }),
       })
 
@@ -305,6 +369,8 @@ export default function Home() {
           ...prev,
           { role: "miaw", text: errorReply, expression: "confused" },
         ])
+        supabase.from("miaw_memories").insert({ role: "miaw", text: errorReply, expression: "confused" }).then()
+        
         resetInactivityTimers()
         return
       }
@@ -314,7 +380,15 @@ export default function Home() {
 
       let actionFired: string | null = null
       
-      if (data.media) {
+      if (data.schedule) {
+        const executeAt = new Date(Date.now() + data.schedule.time_in_minutes * 60000).toISOString()
+        actionFired = `Scheduled ${data.schedule.endpoint} in ${data.schedule.time_in_minutes}m`
+        supabase.from("miaw_schedules").insert({
+          execute_at: executeAt,
+          endpoint: data.schedule.endpoint,
+          method: "POST"
+        }).then()
+      } else if (data.media) {
         actionFired = `Spotify: ${data.media.toUpperCase()}`
         if (data.media === "play") setActiveSpotifyMode("playing")
         if (data.media === "pause") setActiveSpotifyMode("paused")
@@ -334,6 +408,13 @@ export default function Home() {
           actionFired,
         },
       ])
+      
+      supabase.from("miaw_memories").insert({
+        role: "miaw",
+        text: data.reply,
+        expression: data.expression,
+        actionFired
+      }).then()
     } catch {
       setActiveMiawState("confused")
       const errorReply = "Koneksi ke server AI terputus."
@@ -343,6 +424,8 @@ export default function Home() {
         ...prev,
         { role: "miaw", text: errorReply, expression: "confused" },
       ])
+      supabase.from("miaw_memories").insert({ role: "miaw", text: errorReply, expression: "confused" }).then()
+      
       resetInactivityTimers()
     } finally {
       setIsLoading(false)
@@ -418,6 +501,9 @@ export default function Home() {
               <span className="inline-block size-2 bg-green-500 rounded-full animate-pulse" />
               <span className="text-black dark:text-white">Console Online</span>
             </div>
+            <Button variant={isVisionActive ? "default" : "outline"} size="icon" onClick={() => { playClick(); setIsVisionActive(!isVisionActive) }} className={`hidden sm:inline-flex border-[3px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-zinc-100 dark:hover:bg-zinc-800 ${isVisionActive ? "bg-red-400 text-white hover:bg-red-500" : ""}`}>
+              <Camera className="size-4" />
+            </Button>
             <Button variant="outline" size="icon" onClick={() => { playClick(); setShowSettings(true) }} className="hidden sm:inline-flex border-[3px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-zinc-100 dark:hover:bg-zinc-800">
               <Settings className="size-4" />
             </Button>
@@ -460,6 +546,16 @@ export default function Home() {
                     <div className="w-full h-full relative z-10 text-[#9ee2ff] drop-shadow-[0_0_4px_#5ec8ff]">
                       <Miaw state={activeMiawState} animSpeed={animSpeed} animate={animate} />
                     </div>
+                    {isVisionActive && (
+                      <div className="absolute bottom-4 right-4 w-32 h-24 border-[3px] border-[#5ec8ff] overflow-hidden shadow-[0_0_10px_#5ec8ff] z-20">
+                        <Webcam
+                          ref={webcamRef}
+                          audio={false}
+                          screenshotFormat="image/jpeg"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Reply Bubble */}
@@ -516,7 +612,7 @@ export default function Home() {
                             ? "bg-red-400 text-white"
                             : "bg-white text-black hover:bg-zinc-100 dark:bg-zinc-800 dark:text-white dark:hover:bg-zinc-700"
                         }`}
-                        title={isContinuousMic ? "Continuous Mic Active (Listening)" : "Click to enable Continuous Mic"}
+                        title={isContinuousMic ? "Wake Word Mode Active (Say 'Miaw')" : "Click to enable Wake Word Mode"}
                       >
                         {isContinuousMic || isListening ? <MicOff className="size-6" /> : <Mic className="size-6" />}
                       </Button>

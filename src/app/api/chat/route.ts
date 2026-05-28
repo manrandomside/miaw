@@ -37,15 +37,17 @@ JSON schema:
     "endpoint": "string or null - The ESP32 endpoint path like /dapur, /tamu, /kamar, /auto, or null if no hardware action is needed",
     "method": "string - POST or GET"
   },
+  "schedule": "object or null - If scheduling a future action, set {\"time_in_minutes\": number, \"endpoint\": string}, else null",
   "media": "string or null - 'play', 'pause', 'next', 'prev', or null"
 }
 
 Rules:
-- If the user asks to turn on/off a lamp, set the correct endpoint and method POST, and set expression to "happy".
+- If the user asks to turn on/off a lamp immediately, set action endpoint and POST, and set expression to "happy".
+- If the user asks to schedule an action (e.g., '10 menit lagi', 'nanti jam...'), set action to null and fill the "schedule" object.
 - If the user asks about the weather/temperature, read the Sensor Data, set action to null, and tell them.
 - If the user asks to play/pause music, set the "media" field accordingly.
 - If the user greets you, respond warmly and set expression to "happy".
-- For general conversation, set expression to "speaking", action endpoint to null, media to null.
+- For general conversation, set expression to "speaking", action endpoint to null, media to null, schedule to null.
 
 CRITICAL: OUTPUT ONLY VALID JSON. DO NOT WRAP IN MARKDOWN MACROS. NO \`\`\`json. Just the raw { } object, nothing else before or after it.`
 }
@@ -61,6 +63,8 @@ interface ChatRequest {
   message: string
   telemetry?: any
   localTime?: string
+  imageBase64?: string
+  history?: { role: "user" | "assistant"; content: string }[]
 }
 
 export interface MiawResponse {
@@ -70,6 +74,10 @@ export interface MiawResponse {
     endpoint: string | null
     method: string
   }
+  schedule: {
+    time_in_minutes: number
+    endpoint: string
+  } | null
   media: "play" | "pause" | "next" | "prev" | null
 }
 
@@ -96,14 +104,34 @@ export async function POST(request: NextRequest) {
       apiKey: process.env.GROQ_API_KEY,
     })
 
+    let messages: any[] = [
+      { role: "system", content: generateSystemPrompt(body.localTime, body.telemetry) }
+    ]
+
+    if (body.history && Array.isArray(body.history)) {
+      messages = messages.concat(body.history)
+    }
+
+    if (body.imageBase64) {
+      messages.push({
+        role: "user",
+        content: [
+          { type: "text", text: body.message },
+          { type: "image_url", image_url: { url: body.imageBase64 } }
+        ]
+      })
+    } else {
+      messages.push({ role: "user", content: body.message })
+    }
+
+    const modelName = body.imageBase64 ? "llama-3.2-11b-vision-preview" : "llama-3.3-70b-versatile"
+
     const completion = await groq.chat.completions.create({
-      messages: [
-        { role: "system", content: generateSystemPrompt(body.localTime, body.telemetry) },
-        { role: "user", content: body.message },
-      ],
-      model: "llama-3.3-70b-versatile",
+      messages,
+      model: modelName,
       temperature: 0.7,
-      max_tokens: 512,
+      max_tokens: 500,
+      response_format: { type: "json_object" },
     })
 
     const rawContent = completion.choices[0]?.message?.content || ""
@@ -123,6 +151,7 @@ export async function POST(request: NextRequest) {
           reply: sanitized || "Miaw tidak bisa memproses respons dari server.",
           expression: "confused",
           action: { endpoint: null, method: "GET" },
+          schedule: null,
           media: null,
         } satisfies MiawResponse,
         { status: 200 }
@@ -146,6 +175,7 @@ export async function POST(request: NextRequest) {
         reply: "Miaw mengalami gangguan koneksi ke otak AI.",
         expression: "confused",
         action: { endpoint: null, method: "GET" },
+        schedule: null,
         media: null,
         error: message,
       },
