@@ -83,6 +83,14 @@ export default function Home() {
   const [ttsSupported, setTtsSupported] = useState(true)
   const isSpeakingRef = useRef(false)
 
+  // Sync state to ESP32 OLED
+  useEffect(() => {
+    fetch(`${ESP32_BASE_URL}/state`, {
+      method: "POST",
+      body: activeMiawState
+    }).catch(() => {}) // Ignore errors if ESP32 is offline
+  }, [activeMiawState])
+
   // Fetch Memories on Mount
   useEffect(() => {
     async function fetchMemories() {
