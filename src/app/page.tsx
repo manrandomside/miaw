@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Miaw, STATES } from "@/components/Miaw"
-import { SpotifyPlayer, SpotifyTrack } from "@/components/SpotifyPlayer"
+import { SpotifyPlayer, DEMO_SONGS } from "@/components/SpotifyPlayer"
 import type { MiawResponse } from "@/app/api/chat/route"
 import { useTelemetry } from "@/hooks/useTelemetry"
 import { useScheduler } from "@/hooks/useScheduler"
@@ -47,8 +47,8 @@ export default function Home() {
   const [activeView, setActiveView] = useState<"dashboard" | "lyrics">("dashboard")
   
   const [activeMiawState, setActiveMiawState] = useState<keyof typeof STATES>("idleCalm")
-  const [spotifyTrack, setSpotifyTrack] = useState<SpotifyTrack | null>(null)
-  const [isSpotifySearching, setIsSpotifySearching] = useState(false)
+  const [activeSpotifyMode, setActiveSpotifyMode] = useState<"intro" | "playing" | "paused" | "noSong" | "changing">("playing")
+  const [songIndex, setSongIndex] = useState(0)
   const [animSpeed, setAnimSpeed] = useState(1.0)
   const [animate, setAnimate] = useState(true)
 
@@ -395,20 +395,12 @@ export default function Home() {
           endpoint: data.schedule.endpoint,
           method: "POST"
         }).then()
-      } else if (data.spotify_search) {
-        actionFired = `Spotify: Search "${data.spotify_search}"`
-        setIsSpotifySearching(true)
-        setActiveView("lyrics")
-        
-        fetch(`/api/spotify?q=${encodeURIComponent(data.spotify_search)}`)
-          .then(res => res.json())
-          .then(track => {
-            if (track && !track.error) {
-              setSpotifyTrack(track)
-            }
-          })
-          .catch(err => console.error("Spotify fetch error", err))
-          .finally(() => setIsSpotifySearching(false))
+      } else if (data.media) {
+        actionFired = `Spotify: ${data.media.toUpperCase()}`
+        if (data.media === "play") setActiveSpotifyMode("playing")
+        if (data.media === "pause") setActiveSpotifyMode("paused")
+        if (data.media === "next") setSongIndex((prev) => (prev + 1) % DEMO_SONGS.length)
+        if (data.media === "prev") setSongIndex((prev) => (prev - 1 < 0 ? DEMO_SONGS.length - 1 : prev - 1))
       } else if (data.action?.endpoint) {
         actionFired = `${data.action.method} ${data.action.endpoint}`
         dispatchESP32Action(data.action.endpoint, data.action.method)
@@ -519,10 +511,10 @@ export default function Home() {
               <span className="inline-block size-2 bg-green-500 rounded-full animate-pulse" />
               <span className="text-black dark:text-white">Console Online</span>
             </div>
-            <Button variant={isVisionActive ? "default" : "outline"} size="icon" onClick={() => { playClick(); setIsVisionActive(!isVisionActive) }} className={`hidden sm:inline-flex border-[3px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-zinc-100 dark:hover:bg-zinc-800 ${isVisionActive ? "bg-red-400 text-white hover:bg-red-500" : ""}`}>
+            <Button variant={isVisionActive ? "default" : "outline"} size="icon" onClick={() => { playClick(); setIsVisionActive(!isVisionActive) }} className={`border-[3px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-zinc-100 dark:hover:bg-zinc-800 ${isVisionActive ? "bg-red-400 text-white hover:bg-red-500" : ""}`}>
               <Camera className="size-4" />
             </Button>
-            <Button variant="outline" size="icon" onClick={() => { playClick(); setShowSettings(true) }} className="hidden sm:inline-flex border-[3px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-zinc-100 dark:hover:bg-zinc-800">
+            <Button variant="outline" size="icon" onClick={() => { playClick(); setShowSettings(true) }} className="border-[3px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-zinc-100 dark:hover:bg-zinc-800">
               <Settings className="size-4" />
             </Button>
           </div>
@@ -565,12 +557,16 @@ export default function Home() {
                       <Miaw state={activeMiawState} animSpeed={animSpeed} animate={animate} />
                     </div>
                     {isVisionActive && (
-                      <div className="absolute bottom-4 right-4 w-32 h-24 border-[3px] border-[#5ec8ff] overflow-hidden shadow-[0_0_10px_#5ec8ff] z-20">
+                      <div className="absolute top-2 left-2 w-32 h-24 sm:w-40 sm:h-32 border-[3px] border-[#5ec8ff] bg-black overflow-hidden shadow-[4px_4px_0px_0px_rgba(94,200,255,0.5)] z-20 flex flex-col">
+                        <div className="bg-[#5ec8ff] text-black text-[8px] sm:text-[10px] font-black uppercase px-1 flex justify-between items-center">
+                          <span>Vision Active</span>
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                        </div>
                         <Webcam
                           ref={webcamRef}
                           audio={false}
                           screenshotFormat="image/jpeg"
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover grayscale brightness-110 contrast-125 opacity-80 mix-blend-screen"
                         />
                       </div>
                     )}
@@ -604,7 +600,7 @@ export default function Home() {
                   </div>
 
                   {/* Chat Input */}
-                  <div className="flex gap-2">
+                  <div className="flex gap-1.5 sm:gap-2">
                     <input
                       ref={inputRef}
                       type="text"
@@ -615,15 +611,14 @@ export default function Home() {
                       }}
                       placeholder="Ketik pesan ke Miaw..."
                       disabled={isLoading}
-                      className="flex-1 border-[3px] border-black bg-white px-4 py-3 text-base font-bold text-black placeholder:text-zinc-400 focus:outline-none focus:ring-0 focus:bg-[#fffef5] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50 dark:bg-zinc-800 dark:text-white dark:placeholder:text-zinc-500"
+                      className="flex-1 w-full min-w-0 border-[3px] border-black bg-white px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base font-bold text-black placeholder:text-zinc-400 focus:outline-none focus:ring-0 focus:bg-[#fffef5] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50 dark:bg-zinc-800 dark:text-white dark:placeholder:text-zinc-500"
                     />
                     
                     {sttSupported && (
                       <Button
                         onClick={toggleListening}
                         disabled={isLoading}
-                        size="lg"
-                        className={`px-4 shrink-0 border-[3px] border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-colors ${
+                        className={`px-2 sm:px-4 h-11 sm:h-[52px] shrink-0 border-[3px] border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-colors ${
                           isContinuousMic 
                             ? "bg-red-500 text-white hover:bg-red-600 animate-[pulse_1.5s_ease-in-out_infinite]" 
                             : isListening
@@ -632,7 +627,7 @@ export default function Home() {
                         }`}
                         title={isContinuousMic ? "Wake Word Mode Active (Say 'Miaw')" : "Click to enable Wake Word Mode"}
                       >
-                        {isContinuousMic || isListening ? <MicOff className="size-6" /> : <Mic className="size-6" />}
+                        {isContinuousMic || isListening ? <MicOff className="size-5 sm:size-6" /> : <Mic className="size-5 sm:size-6" />}
                       </Button>
                     )}
 
@@ -642,13 +637,12 @@ export default function Home() {
                           handleSendMessage()
                         }}
                         disabled={isLoading || (!chatInput.trim() && !isListening)}
-                      size="lg"
-                      className="px-6 shrink-0 border-[3px] border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                      className="px-3 sm:px-6 h-11 sm:h-[52px] shrink-0 border-[3px] border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
                     >
                       {isLoading ? (
-                        <Loader2 className="size-6 animate-spin" />
+                        <Loader2 className="size-5 sm:size-6 animate-spin" />
                       ) : (
-                        <Send className="size-6" />
+                        <Send className="size-5 sm:size-6" />
                       )}
                     </Button>
                   </div>
@@ -889,12 +883,71 @@ export default function Home() {
                   {/* Styled Spotify Viewport */}
                   <div className="border-[4px] border-black bg-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden h-64 sm:h-80 flex items-center justify-center">
                     <SpotifyPlayer
-                      track={spotifyTrack}
-                      isSearching={isSpotifySearching}
+                      mode={activeSpotifyMode}
+                      songIndex={songIndex}
+                      speed={animSpeed}
                     />
                   </div>
 
+                  {/* Spotify Track Picker */}
+                  <div className="space-y-4 pt-4">
+                    <h3 className="font-black text-base uppercase tracking-wider text-black dark:text-white flex items-center gap-2">
+                      <Music className="size-5" />
+                      Select Demo Track
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {DEMO_SONGS.map((song, idx) => {
+                        const isSelected = songIndex === idx
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => setSongIndex(idx)}
+                            className={`w-full flex items-center justify-between p-4 border-[3px] border-black text-left font-mono font-bold transition-all ${
+                              isSelected
+                                ? "bg-[#60a5fa] text-black translate-x-[2px] translate-y-[2px] shadow-none"
+                                : "bg-white text-black hover:bg-[#f4f4f0] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:bg-zinc-800 dark:text-white"
+                            }`}
+                          >
+                            <div className="flex items-center gap-4">
+                              <span className="text-sm opacity-50">0{idx + 1}</span>
+                              <div>
+                                <span className="block text-base uppercase font-black">{song.title}</span>
+                                <span className="block text-xs opacity-60">{song.artist}</span>
+                              </div>
+                            </div>
+                            <span className="text-sm opacity-75">
+                              {Math.floor(song.duration / 60)}:{(song.duration % 60).toString().padStart(2, "0")}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
 
+                  {/* Spotify Screen Mode Controllers */}
+                  <div className="space-y-4 pt-6 border-t-[3px] border-black/10">
+                    <h3 className="font-black text-sm uppercase tracking-wider text-black dark:text-white">
+                      Spotify Screen Mode Triggers
+                    </h3>
+                    <div className="flex flex-wrap gap-3">
+                      {(["playing", "paused", "noSong", "changing", "intro"] as const).map((mode) => {
+                        const isSelected = activeSpotifyMode === mode
+                        return (
+                          <Button
+                            key={mode}
+                            variant={isSelected ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setActiveSpotifyMode(mode)}
+                            className={`font-black text-sm px-4 h-10 border-[3px] border-black uppercase ${
+                              isSelected ? "bg-[#60a5fa] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" : "shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-zinc-100"
+                            }`}
+                          >
+                            {mode === "noSong" ? "No Song" : mode}
+                          </Button>
+                        )
+                      })}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="border-t-[3px] border-black/10 pt-4 mt-8">

@@ -23,9 +23,8 @@ Your smart home capabilities:
 - Use GET on any endpoint to read current status.
 
 Media / Spotify Capabilities:
-- You can act as a Spotify search assistant.
-- If the user asks to play a specific song or artist (e.g. "putar lagu Nadin Amizah"), extract the query and set "spotify_search" to "Nadin Amizah".
-- Set to null if not related to searching music.
+- You can control the local Spotify interface.
+- Set the "media" field to "play", "pause", "next", "prev", or null.
 
 Response format:
 You MUST respond with ONLY a valid JSON object. No markdown code fences, no introductory text, no trailing text. Just the raw JSON object.
@@ -39,16 +38,16 @@ JSON schema:
     "method": "string - POST or GET"
   },
   "schedule": "object or null - If scheduling a future action, set {\"time_in_minutes\": number, \"endpoint\": string}, else null",
-  "spotify_search": "string or null - The song or artist to search on Spotify, else null"
+  "media": "string or null - 'play', 'pause', 'next', 'prev', or null"
 }
 
 Rules:
 - If the user asks to turn on/off a lamp immediately, set action endpoint and POST, and set expression to "happy".
 - If the user asks to schedule an action (e.g., '10 menit lagi', 'nanti jam...'), set action to null and fill the "schedule" object.
 - If the user asks about the weather/temperature, read the Sensor Data, set action to null, and tell them.
-- If the user asks to play music or search a song, set the "spotify_search" field to the query.
+- If the user asks to play/pause music, set the "media" field accordingly.
 - If the user greets you, respond warmly and set expression to "happy".
-- For general conversation, set expression to "speaking", action endpoint to null, spotify_search to null, schedule to null.
+- For general conversation, set expression to "speaking", action endpoint to null, media to null, schedule to null.
 
 CRITICAL: OUTPUT ONLY VALID JSON. DO NOT WRAP IN MARKDOWN MACROS. NO \`\`\`json. Just the raw { } object, nothing else before or after it.`
 }
@@ -75,11 +74,11 @@ export interface MiawResponse {
     endpoint: string | null
     method: string
   }
-  schedule?: {
+  schedule: {
     time_in_minutes: number
     endpoint: string
   } | null
-  spotify_search?: string | null
+  media: "play" | "pause" | "next" | "prev" | null
 }
 
 export async function POST(request: NextRequest) {
@@ -153,7 +152,7 @@ export async function POST(request: NextRequest) {
           expression: "confused",
           action: { endpoint: null, method: "GET" },
           schedule: null,
-          spotify_search: null,
+          media: null,
         } satisfies MiawResponse,
         { status: 200 }
       )
