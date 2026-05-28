@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 
+const ESP32_BASE_URL = "http://192.168.254.156"
+
 export interface TelemetryData {
   temperature: number
   humidity: number
@@ -20,20 +22,13 @@ export function useTelemetry() {
   useEffect(() => {
     const fetchTelemetry = async () => {
       try {
-        // Use our server-side proxy API instead of direct ESP32 fetch.
-        // This way it works both on localhost AND when deployed to hosting,
-        // since the Next.js server (not the browser) reaches the ESP32.
-        const res = await fetch("/api/telemetry", { cache: "no-store" })
-
-        if (!res.ok) {
-          const errorBody = await res.json().catch(() => ({}))
-          setIsOffline(!!errorBody?.offline)
-          throw new Error(errorBody?.error || `HTTP ${res.status}`)
-        }
-
+        // Fetch langsung dari browser ke ESP32 (same local network)
+        const res = await fetch(`${ESP32_BASE_URL}/telemetry`)
+        if (!res.ok) throw new Error("Failed to fetch telemetry")
+        
         const json = (await res.json()) as TelemetryData
 
-        // Validate that we got real sensor data (not NaN or undefined)
+        // Validate sensor data
         if (
           typeof json.temperature !== "number" ||
           typeof json.humidity !== "number" ||
@@ -52,6 +47,7 @@ export function useTelemetry() {
       } catch (err) {
         consecutiveErrorsRef.current += 1
         setIsError(true)
+        setIsOffline(true)
 
         // Only null out data after 3 consecutive failures
         // to prevent flickering on transient network issues
