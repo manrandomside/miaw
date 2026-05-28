@@ -147,10 +147,14 @@ export default function Home() {
           setIsListening(false)
           if (isContinuousMicRef.current) {
             setTimeout(() => {
-              if (isContinuousMicRef.current) {
-                try { recognitionRef.current.start() } catch (e) {}
+              if (isContinuousMicRef.current && recognitionRef.current) {
+                try {
+                  recognitionRef.current.start()
+                } catch (e) {
+                  // Already running, ignore
+                }
               }
-            }, 100)
+            }, 300)
           }
         }
       }
@@ -229,20 +233,10 @@ export default function Home() {
 
   const speakReply = useCallback((text: string, targetExpression?: keyof typeof STATES) => {
     playPop()
-    const handleMicRestart = () => {
-      if (isContinuousMicRef.current && recognitionRef.current) {
-        try {
-          recognitionRef.current.start()
-          if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current)
-          silenceTimeoutRef.current = setTimeout(() => {
-            if (isContinuousMicRef.current) {
-              speakReply("Hmm?", "listening")
-            }
-          }, 10000)
-        } catch (e) {
-          console.warn("Continuous Mic restart failed:", e)
-        }
-      }
+
+    // Stop mic before speaking to avoid collision
+    if (recognitionRef.current && isContinuousMicRef.current) {
+      try { recognitionRef.current.stop() } catch (e) {}
     }
 
     if (isMuted || !ttsSupported || typeof window === "undefined") {
@@ -251,12 +245,10 @@ export default function Home() {
         expressionTimeoutRef.current = setTimeout(() => {
           setActiveMiawState("idleCalm")
           resetInactivityTimers()
-          handleMicRestart()
         }, 2000)
       } else {
         setActiveMiawState("idleCalm")
         resetInactivityTimers()
-        handleMicRestart()
       }
       return
     }
@@ -303,14 +295,14 @@ export default function Home() {
         expressionTimeoutRef.current = setTimeout(() => {
           setActiveMiawState("idleCalm")
           resetInactivityTimers()
-          handleMicRestart()
+          // onend handler will auto-restart mic
         }, 2000)
       }
 
       utterance.onerror = () => {
         setActiveMiawState("idleCalm")
         resetInactivityTimers()
-        handleMicRestart()
+        // onend handler will auto-restart mic
       }
 
       synth.speak(utterance)
