@@ -81,6 +81,7 @@ export default function Home() {
   // Speech Synthesis (TTS) State
   const [isMuted, setIsMuted] = useState(false)
   const [ttsSupported, setTtsSupported] = useState(true)
+  const isSpeakingRef = useRef(false)
 
   // Fetch Memories on Mount
   useEffect(() => {
@@ -138,16 +139,20 @@ export default function Home() {
         }
 
         recognitionRef.current.onerror = (event: any) => {
-          console.warn("Speech API Error:", event.error)
+          if (event.error === 'no-speech' || event.error === 'aborted') {
+            // Silently ignore during TTS or idle periods
+          } else {
+            console.warn("Speech API Error:", event.error)
+          }
           setIsListening(false)
-          setActiveMiawState("idleCalm")
         }
 
         recognitionRef.current.onend = () => {
           setIsListening(false)
-          if (isContinuousMicRef.current) {
+          // Only auto-restart if continuous mode is on AND Miaw is NOT speaking
+          if (isContinuousMicRef.current && !isSpeakingRef.current) {
             setTimeout(() => {
-              if (isContinuousMicRef.current && recognitionRef.current) {
+              if (isContinuousMicRef.current && !isSpeakingRef.current && recognitionRef.current) {
                 try {
                   recognitionRef.current.start()
                 } catch (e) {
@@ -231,10 +236,26 @@ export default function Home() {
     }
   }, [])
 
+  const restartMicAfterSpeech = useCallback(() => {
+    isSpeakingRef.current = false
+    if (isContinuousMicRef.current && recognitionRef.current) {
+      setTimeout(() => {
+        if (isContinuousMicRef.current && !isSpeakingRef.current && recognitionRef.current) {
+          try {
+            recognitionRef.current.start()
+          } catch (e) {
+            // Already running, ignore
+          }
+        }
+      }, 400)
+    }
+  }, [])
+
   const speakReply = useCallback((text: string, targetExpression?: keyof typeof STATES) => {
     playPop()
 
-    // Stop mic before speaking to avoid collision
+    // Mark as speaking and stop mic to avoid collision
+    isSpeakingRef.current = true
     if (recognitionRef.current && isContinuousMicRef.current) {
       try { recognitionRef.current.stop() } catch (e) {}
     }
@@ -245,10 +266,12 @@ export default function Home() {
         expressionTimeoutRef.current = setTimeout(() => {
           setActiveMiawState("idleCalm")
           resetInactivityTimers()
+          restartMicAfterSpeech()
         }, 2000)
       } else {
         setActiveMiawState("idleCalm")
         resetInactivityTimers()
+        restartMicAfterSpeech()
       }
       return
     }
@@ -295,14 +318,14 @@ export default function Home() {
         expressionTimeoutRef.current = setTimeout(() => {
           setActiveMiawState("idleCalm")
           resetInactivityTimers()
-          // onend handler will auto-restart mic
+          restartMicAfterSpeech()
         }, 2000)
       }
 
       utterance.onerror = () => {
         setActiveMiawState("idleCalm")
         resetInactivityTimers()
-        // onend handler will auto-restart mic
+        restartMicAfterSpeech()
       }
 
       synth.speak(utterance)
@@ -310,8 +333,9 @@ export default function Home() {
       console.warn("Speech Synthesis failed:", err)
       setActiveMiawState("idleCalm")
       resetInactivityTimers()
+      restartMicAfterSpeech()
     }
-  }, [isMuted, ttsSupported, resetInactivityTimers, playPop, ttsPitch, ttsRate])
+  }, [isMuted, ttsSupported, resetInactivityTimers, playPop, ttsPitch, ttsRate, restartMicAfterSpeech])
 
   const handleSendMessage = useCallback(async (overrideMessage?: string) => {
     const message = (overrideMessage || chatInput).trim()
