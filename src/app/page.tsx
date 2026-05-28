@@ -1,23 +1,34 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Miaw, STATES } from "@/components/Miaw"
 import { SpotifyPlayer, DEMO_SONGS } from "@/components/SpotifyPlayer"
+import type { MiawResponse } from "@/app/api/chat/route"
 import {
   Cpu,
-  Wifi,
   Settings,
   Thermometer,
   Sun,
   Lightbulb,
   ShieldAlert,
-  Play,
-  Pause,
   Music,
   Sliders,
-  Volume2
+  Send,
+  Loader2,
+  MessageSquare,
+  Zap,
+  AlertTriangle,
 } from "lucide-react"
+
+const ESP32_BASE_URL = "http://192.168.254.156"
+
+interface ChatMessage {
+  role: "user" | "miaw"
+  text: string
+  expression?: string
+  actionFired?: string | null
+}
 
 export default function Home() {
   const [activeMiawState, setActiveMiawState] = useState<keyof typeof STATES>("idleCalm")
@@ -26,7 +37,96 @@ export default function Home() {
   const [animSpeed, setAnimSpeed] = useState(1.0)
   const [animate, setAnimate] = useState(true)
 
+  const [chatInput, setChatInput] = useState("")
+  const [chatLog, setChatLog] = useState<ChatMessage[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [lastReply, setLastReply] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
   const activeStateCfg = STATES[activeMiawState] || STATES.idleCalm
+
+  const dispatchESP32Action = useCallback(async (endpoint: string, method: string) => {
+    try {
+      await fetch(`${ESP32_BASE_URL}${endpoint}`, {
+        method,
+        mode: "no-cors",
+      })
+    } catch {
+      // ESP32 may be unreachable in dev; silently fail
+    }
+  }, [])
+
+  const handleSendMessage = useCallback(async () => {
+    const message = chatInput.trim()
+    if (!message || isLoading) return
+
+    setChatInput("")
+    setChatLog((prev) => [...prev, { role: "user", text: message }])
+    setActiveMiawState("thinking")
+    setIsLoading(true)
+    setLastReply(null)
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
+      })
+
+      const data = (await res.json()) as MiawResponse & { error?: string }
+
+      if (!res.ok || data.error) {
+        setActiveMiawState("confused")
+        const errorReply = data.reply || "Miaw tidak bisa memproses permintaan."
+        setLastReply(errorReply)
+        setChatLog((prev) => [
+          ...prev,
+          { role: "miaw", text: errorReply, expression: "confused" },
+        ])
+        return
+      }
+
+      setActiveMiawState("speaking")
+
+      setTimeout(() => {
+        const expr = (data.expression || "speaking") as keyof typeof STATES
+        if (STATES[expr]) {
+          setActiveMiawState(expr)
+        } else {
+          setActiveMiawState("speaking")
+        }
+      }, 1500)
+
+      setLastReply(data.reply)
+
+      let actionFired: string | null = null
+      if (data.action?.endpoint) {
+        actionFired = `${data.action.method} ${data.action.endpoint}`
+        dispatchESP32Action(data.action.endpoint, data.action.method)
+      }
+
+      setChatLog((prev) => [
+        ...prev,
+        {
+          role: "miaw",
+          text: data.reply,
+          expression: data.expression,
+          actionFired,
+        },
+      ])
+    } catch {
+      setActiveMiawState("confused")
+      const errorReply = "Koneksi ke server AI terputus."
+      setLastReply(errorReply)
+      setChatLog((prev) => [
+        ...prev,
+        { role: "miaw", text: errorReply, expression: "confused" },
+      ])
+    } finally {
+      setIsLoading(false)
+      inputRef.current?.focus()
+    }
+  }, [chatInput, isLoading, dispatchESP32Action])
 
   return (
     <div className="min-h-screen flex flex-col font-sans selection:bg-black selection:text-white bg-[#f4f4f0] dark:bg-zinc-950">
@@ -57,15 +157,15 @@ export default function Home() {
         {/* Core Layout: 2-Column Grid for AI & Media */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
-          {/* Left Column: AI Assistant ("Miaw") */}
-          <div className="border-[4px] border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between dark:bg-zinc-900">
-            <div className="space-y-6">
+          {/* Left Column: AI Assistant ("Miaw") + Chat */}
+          <div className="border-[4px] border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col dark:bg-zinc-900">
+            <div className="space-y-5">
               <div className="flex justify-between items-center">
                 <span className="border-[3px] border-black bg-[#ffde43] text-black px-3 py-1 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                   AI Assistant Mascot
                 </span>
                 <span className="text-xs font-mono font-black uppercase text-zinc-500">
-                  SSD1306 Preview
+                  Groq LLM Brain
                 </span>
               </div>
 
@@ -73,7 +173,7 @@ export default function Home() {
                 Miaw Character
               </h2>
 
-              {/* Styled OLED Screen Viewport */}
+              {/* OLED Screen Viewport */}
               <div className="border-[4px] border-black bg-black p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] relative h-48 flex items-center justify-center overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_#0b1a2e_0%,_#050912_100%)] pointer-events-none" />
                 <div
@@ -88,24 +188,72 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* State Details Readout */}
-              <div className="border-[3px] border-black bg-[#f4f4f0] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] dark:bg-zinc-800 dark:border-white">
-                <h3 className="font-black text-sm uppercase border-b-2 border-black/10 pb-1 mb-2 text-black dark:text-white">
-                  Inspecting state: <span className="text-blue-600 dark:text-blue-400">{activeStateCfg.label}</span>
-                </h3>
-                <dl className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs font-mono font-bold text-zinc-700 dark:text-zinc-300">
-                  <div>
-                    <span className="block text-zinc-400 uppercase text-[10px]">Triggered By</span>
-                    <span className="text-black dark:text-white">{activeStateCfg.trigger}</span>
-                  </div>
-                  <div>
-                    <span className="block text-zinc-400 uppercase text-[10px]">Animation Hint</span>
-                    <span className="text-black dark:text-white">{activeStateCfg.anim}</span>
-                  </div>
-                </dl>
+              {/* Reply Bubble */}
+              {lastReply && (
+                <div className="border-[3px] border-black bg-[#ffde43] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] relative">
+                  <div className="absolute -top-2 left-6 w-4 h-4 bg-[#ffde43] border-t-[3px] border-l-[3px] border-black rotate-45" />
+                  <p className="font-bold text-sm text-black leading-relaxed">{lastReply}</p>
+                  <span className="block text-[10px] font-black uppercase text-black/50 mt-1">
+                    Miaw -- {activeMiawState}
+                  </span>
+                </div>
+              )}
+
+              {/* Chat Input */}
+              <div className="flex gap-2">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSendMessage()
+                  }}
+                  placeholder="Ketik pesan ke Miaw..."
+                  disabled={isLoading}
+                  className="flex-1 border-[3px] border-black bg-white px-4 py-2.5 text-sm font-bold text-black placeholder:text-zinc-400 focus:outline-none focus:ring-0 focus:bg-[#fffef5] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50 dark:bg-zinc-800 dark:text-white dark:placeholder:text-zinc-500"
+                />
+                <Button
+                  onClick={handleSendMessage}
+                  disabled={isLoading || !chatInput.trim()}
+                  size="default"
+                  className="px-4 shrink-0"
+                >
+                  {isLoading ? (
+                    <Loader2 className="size-5 animate-spin" />
+                  ) : (
+                    <Send className="size-5" />
+                  )}
+                </Button>
               </div>
 
-              {/* State Manual Controllers */}
+              {/* Chat Log */}
+              {chatLog.length > 0 && (
+                <div className="border-[3px] border-black bg-[#f4f4f0] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] max-h-48 overflow-y-auto dark:bg-zinc-800 dark:border-white">
+                  <div className="flex items-center gap-2 px-3 py-2 border-b-[2px] border-black/10">
+                    <MessageSquare className="size-3 text-zinc-500" />
+                    <span className="text-[10px] font-black uppercase text-zinc-500">Chat History</span>
+                  </div>
+                  <div className="p-3 space-y-2">
+                    {chatLog.map((msg, i) => (
+                      <div key={i} className={`text-xs font-mono ${msg.role === "user" ? "text-blue-700 dark:text-blue-400" : "text-black dark:text-white"}`}>
+                        <span className="font-black uppercase text-[10px] opacity-60">
+                          {msg.role === "user" ? "YOU" : "MIAW"}
+                        </span>
+                        <span className="ml-2">{msg.text}</span>
+                        {msg.actionFired && (
+                          <span className="ml-2 inline-flex items-center gap-1 text-[10px] text-green-700 dark:text-green-400">
+                            <Zap className="size-2.5" />
+                            {msg.actionFired}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Manual State Triggers */}
               <div className="space-y-3">
                 <h3 className="font-black text-sm uppercase tracking-wider text-black dark:text-white">
                   Manual State Triggers
