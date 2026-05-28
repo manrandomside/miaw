@@ -52,7 +52,7 @@ export function useTelemetry() {
 
     fetchInitialData()
 
-    // 2. Subscribe to realtime changes
+    // 2. Subscribe to realtime changes (Fast updates)
     const channel = supabase
       .channel('schema-db-changes')
       .on(
@@ -81,8 +81,13 @@ export function useTelemetry() {
       )
       .subscribe()
 
+    // 3. Fallback Polling (3 seconds) ensures it ALWAYS updates 
+    // even if Supabase Realtime is misconfigured or WebSocket drops.
+    const interval = setInterval(fetchInitialData, 3000)
+
     return () => {
       supabase.removeChannel(channel)
+      clearInterval(interval)
     }
   }, [])
 
