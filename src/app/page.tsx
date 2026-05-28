@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Miaw, STATES } from "@/components/Miaw"
-import { SpotifyPlayer, DEMO_SONGS } from "@/components/SpotifyPlayer"
+import { SpotifyPlayer, SpotifyTrack } from "@/components/SpotifyPlayer"
 import type { MiawResponse } from "@/app/api/chat/route"
 import { useTelemetry } from "@/hooks/useTelemetry"
 import { useScheduler } from "@/hooks/useScheduler"
@@ -47,8 +47,8 @@ export default function Home() {
   const [activeView, setActiveView] = useState<"dashboard" | "lyrics">("dashboard")
   
   const [activeMiawState, setActiveMiawState] = useState<keyof typeof STATES>("idleCalm")
-  const [activeSpotifyMode, setActiveSpotifyMode] = useState<"intro" | "playing" | "paused" | "noSong" | "changing">("playing")
-  const [songIndex, setSongIndex] = useState(0)
+  const [spotifyTrack, setSpotifyTrack] = useState<SpotifyTrack | null>(null)
+  const [isSpotifySearching, setIsSpotifySearching] = useState(false)
   const [animSpeed, setAnimSpeed] = useState(1.0)
   const [animate, setAnimate] = useState(true)
 
@@ -395,12 +395,20 @@ export default function Home() {
           endpoint: data.schedule.endpoint,
           method: "POST"
         }).then()
-      } else if (data.media) {
-        actionFired = `Spotify: ${data.media.toUpperCase()}`
-        if (data.media === "play") setActiveSpotifyMode("playing")
-        if (data.media === "pause") setActiveSpotifyMode("paused")
-        if (data.media === "next") setSongIndex((prev) => (prev + 1) % DEMO_SONGS.length)
-        if (data.media === "prev") setSongIndex((prev) => (prev - 1 < 0 ? DEMO_SONGS.length - 1 : prev - 1))
+      } else if (data.spotify_search) {
+        actionFired = `Spotify: Search "${data.spotify_search}"`
+        setIsSpotifySearching(true)
+        setActiveView("lyrics")
+        
+        fetch(`/api/spotify?q=${encodeURIComponent(data.spotify_search)}`)
+          .then(res => res.json())
+          .then(track => {
+            if (track && !track.error) {
+              setSpotifyTrack(track)
+            }
+          })
+          .catch(err => console.error("Spotify fetch error", err))
+          .finally(() => setIsSpotifySearching(false))
       } else if (data.action?.endpoint) {
         actionFired = `${data.action.method} ${data.action.endpoint}`
         dispatchESP32Action(data.action.endpoint, data.action.method)
@@ -881,71 +889,12 @@ export default function Home() {
                   {/* Styled Spotify Viewport */}
                   <div className="border-[4px] border-black bg-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden h-64 sm:h-80 flex items-center justify-center">
                     <SpotifyPlayer
-                      mode={activeSpotifyMode}
-                      songIndex={songIndex}
-                      speed={animSpeed}
+                      track={spotifyTrack}
+                      isSearching={isSpotifySearching}
                     />
                   </div>
 
-                  {/* Spotify Track Picker */}
-                  <div className="space-y-4 pt-4">
-                    <h3 className="font-black text-base uppercase tracking-wider text-black dark:text-white flex items-center gap-2">
-                      <Music className="size-5" />
-                      Select Demo Track
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {DEMO_SONGS.map((song, idx) => {
-                        const isSelected = songIndex === idx
-                        return (
-                          <button
-                            key={idx}
-                            onClick={() => setSongIndex(idx)}
-                            className={`w-full flex items-center justify-between p-4 border-[3px] border-black text-left font-mono font-bold transition-all ${
-                              isSelected
-                                ? "bg-[#60a5fa] text-black translate-x-[2px] translate-y-[2px] shadow-none"
-                                : "bg-white text-black hover:bg-[#f4f4f0] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:bg-zinc-800 dark:text-white"
-                            }`}
-                          >
-                            <div className="flex items-center gap-4">
-                              <span className="text-sm opacity-50">0{idx + 1}</span>
-                              <div>
-                                <span className="block text-base uppercase font-black">{song.title}</span>
-                                <span className="block text-xs opacity-60">{song.artist}</span>
-                              </div>
-                            </div>
-                            <span className="text-sm opacity-75">
-                              {Math.floor(song.duration / 60)}:{(song.duration % 60).toString().padStart(2, "0")}
-                            </span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
 
-                  {/* Spotify Screen Mode Controllers */}
-                  <div className="space-y-4 pt-6 border-t-[3px] border-black/10">
-                    <h3 className="font-black text-sm uppercase tracking-wider text-black dark:text-white">
-                      Spotify Screen Mode Triggers
-                    </h3>
-                    <div className="flex flex-wrap gap-3">
-                      {(["playing", "paused", "noSong", "changing", "intro"] as const).map((mode) => {
-                        const isSelected = activeSpotifyMode === mode
-                        return (
-                          <Button
-                            key={mode}
-                            variant={isSelected ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setActiveSpotifyMode(mode)}
-                            className={`font-black text-sm px-4 h-10 border-[3px] border-black uppercase ${
-                              isSelected ? "bg-[#60a5fa] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" : "shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-zinc-100"
-                            }`}
-                          >
-                            {mode === "noSong" ? "No Song" : mode}
-                          </Button>
-                        )
-                      })}
-                    </div>
-                  </div>
                 </div>
 
                 <div className="border-t-[3px] border-black/10 pt-4 mt-8">

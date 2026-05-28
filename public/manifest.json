@@ -1,0 +1,21 @@
+{
+  "name": "Miaw Hub",
+  "short_name": "Miaw",
+  "description": "Smart Home & AI Companion",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f4f0",
+  "theme_color": "#ffdf00",
+  "icons": [
+    {
+      "src": "/globe.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/globe.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
