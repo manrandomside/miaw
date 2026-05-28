@@ -32,7 +32,8 @@ import {
   VolumeX,
 } from "lucide-react"
 
-const ESP32_BASE_URL = "http://192.168.254.156"
+// All ESP32 communication now goes through server-side proxies:
+// /api/telemetry for sensor data, /api/esp32 for actions
 
 interface ChatMessage {
   role: "user" | "miaw"
@@ -87,18 +88,16 @@ export default function Home() {
 
   // Sync state to ESP32 OLED
   useEffect(() => {
-    fetch(`${ESP32_BASE_URL}/state`, {
+    fetch(`/api/esp32?endpoint=/state&method=POST`, {
       method: "POST",
-      mode: "no-cors",
       body: activeMiawState
     }).catch(() => {}) // Ignore errors if ESP32 is offline
   }, [activeMiawState])
 
   // Sync dashboard visibility to ESP32
   useEffect(() => {
-    fetch(`${ESP32_BASE_URL}/dash`, {
+    fetch(`/api/esp32?endpoint=/dash&method=POST`, {
       method: "POST",
-      mode: "no-cors",
       body: showDashboard ? "1" : "0"
     }).catch(() => {})
   }, [showDashboard])
@@ -232,9 +231,8 @@ export default function Home() {
 
   const dispatchESP32Action = useCallback(async (endpoint: string, method: string) => {
     try {
-      await fetch(`${ESP32_BASE_URL}${endpoint}`, {
-        method,
-        mode: "no-cors",
+      await fetch(`/api/esp32?endpoint=${encodeURIComponent(endpoint)}&method=${method}`, {
+        method: "POST",
       })
     } catch {
       // ESP32 may be unreachable; silently fail
@@ -251,9 +249,8 @@ export default function Home() {
     }
     const endpoint = endpoints[lampId]
     try {
-      await fetch(`${ESP32_BASE_URL}${endpoint}`, {
+      await fetch(`/api/esp32?endpoint=${encodeURIComponent(endpoint)}&method=POST`, {
         method: "POST",
-        mode: "no-cors",
       })
     } catch (err) {
       console.warn(`Manual toggle failed for ${lampId}:`, err)
