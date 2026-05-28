@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Miaw, STATES } from "@/components/Miaw"
 import { SpotifyPlayer, DEMO_SONGS } from "@/components/SpotifyPlayer"
 import type { MiawResponse } from "@/app/api/chat/route"
+import { useTelemetry } from "@/hooks/useTelemetry"
 import {
   Cpu,
   Settings,
@@ -36,6 +37,7 @@ interface ChatMessage {
 }
 
 export default function Home() {
+  const { data: telemetry, isError: telemetryError } = useTelemetry()
   const [activeView, setActiveView] = useState<"dashboard" | "lyrics">("dashboard")
   
   const [activeMiawState, setActiveMiawState] = useState<keyof typeof STATES>("idleCalm")
@@ -582,11 +584,15 @@ export default function Home() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="border-[3px] border-black bg-white p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] dark:bg-zinc-800">
                         <div className="text-xs font-black uppercase text-zinc-500 dark:text-zinc-400">Temp</div>
-                        <div className="text-2xl sm:text-3xl font-black text-black dark:text-white">24.5 &deg;C</div>
+                        <div className="text-2xl sm:text-3xl font-black text-black dark:text-white">
+                          {telemetryError || !telemetry ? "ERR" : `${telemetry.temperature.toFixed(1)} \u00b0C`}
+                        </div>
                       </div>
                       <div className="border-[3px] border-black bg-white p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] dark:bg-zinc-800">
                         <div className="text-xs font-black uppercase text-zinc-500 dark:text-zinc-400">Humidity</div>
-                        <div className="text-2xl sm:text-3xl font-black text-black dark:text-white">62.0 %</div>
+                        <div className="text-2xl sm:text-3xl font-black text-black dark:text-white">
+                          {telemetryError || !telemetry ? "---" : `${telemetry.humidity.toFixed(1)} %`}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -602,11 +608,15 @@ export default function Home() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="border-[3px] border-black bg-white p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] dark:bg-zinc-800">
                         <div className="text-xs font-black uppercase text-zinc-500 dark:text-zinc-400">Intensity</div>
-                        <div className="text-2xl sm:text-3xl font-black text-black dark:text-white">350 lx</div>
+                        <div className="text-2xl sm:text-3xl font-black text-black dark:text-white">
+                          {telemetryError || !telemetry ? "ERR" : `${telemetry.ldr} lx`}
+                        </div>
                       </div>
                       <div className="border-[3px] border-black bg-white p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] dark:bg-zinc-800">
                         <div className="text-xs font-black uppercase text-zinc-500 dark:text-zinc-400">Auto Mode</div>
-                        <div className="text-lg sm:text-xl font-black uppercase pt-1 text-green-600 dark:text-green-400">Active</div>
+                        <div className="text-lg sm:text-xl font-black uppercase pt-1 text-green-600 dark:text-green-400">
+                          {telemetryError || !telemetry ? "ERR" : "Active"}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -621,15 +631,27 @@ export default function Home() {
                   <div className="space-y-3 font-bold text-sm">
                     <div className="flex justify-between items-center border-[3px] border-black bg-white px-3 py-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:bg-zinc-800">
                       <span className="text-black dark:text-white">Lamp 1 (Living Room)</span>
-                      <span className="text-xs font-black uppercase bg-green-200 border-[2px] border-black px-2 py-0.5 text-black dark:bg-green-950 dark:text-green-300">On</span>
+                      {!telemetryError && telemetry?.lamps.lamp1 ? (
+                        <span className="text-xs font-black uppercase bg-green-200 border-[2px] border-black px-2 py-0.5 text-black dark:bg-green-950 dark:text-green-300">On</span>
+                      ) : (
+                        <span className="text-xs font-black uppercase bg-red-200 border-[2px] border-black px-2 py-0.5 text-black dark:bg-red-950 dark:text-red-300">Off</span>
+                      )}
                     </div>
                     <div className="flex justify-between items-center border-[3px] border-black bg-white px-3 py-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:bg-zinc-800">
                       <span className="text-black dark:text-white">Lamp 2 (Bedroom)</span>
-                      <span className="text-xs font-black uppercase bg-red-200 border-[2px] border-black px-2 py-0.5 text-black dark:bg-red-950 dark:text-red-300">Off</span>
+                      {!telemetryError && telemetry?.lamps.lamp2 ? (
+                        <span className="text-xs font-black uppercase bg-green-200 border-[2px] border-black px-2 py-0.5 text-black dark:bg-green-950 dark:text-green-300">On</span>
+                      ) : (
+                        <span className="text-xs font-black uppercase bg-red-200 border-[2px] border-black px-2 py-0.5 text-black dark:bg-red-950 dark:text-red-300">Off</span>
+                      )}
                     </div>
                     <div className="flex justify-between items-center border-[3px] border-black bg-white px-3 py-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:bg-zinc-800">
                       <span className="text-black dark:text-white">Lamp 3 (Kitchen)</span>
-                      <span className="text-xs font-black uppercase bg-red-200 border-[2px] border-black px-2 py-0.5 text-black dark:bg-red-950 dark:text-red-300">Off</span>
+                      {!telemetryError && telemetry?.lamps.lamp3 ? (
+                        <span className="text-xs font-black uppercase bg-green-200 border-[2px] border-black px-2 py-0.5 text-black dark:bg-green-950 dark:text-green-300">On</span>
+                      ) : (
+                        <span className="text-xs font-black uppercase bg-red-200 border-[2px] border-black px-2 py-0.5 text-black dark:bg-red-950 dark:text-red-300">Off</span>
+                      )}
                     </div>
                   </div>
                 </div>
