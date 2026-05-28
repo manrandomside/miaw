@@ -111,55 +111,42 @@ export default function Home() {
         setSttSupported(false)
       } else {
         recognitionRef.current = new SpeechRecognition()
-        recognitionRef.current.continuous = false
         recognitionRef.current.lang = "id-ID"
         recognitionRef.current.interimResults = false
+        // continuous = true: mic stays alive and fires onresult for each phrase
+        recognitionRef.current.continuous = true
 
         recognitionRef.current.onstart = () => {
           setIsListening(true)
-          if (!isContinuousMicRef.current) {
-            setActiveMiawState("listening")
-          }
         }
 
         recognitionRef.current.onresult = (event: any) => {
-          if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current)
-          const rawTranscript = event.results[0][0].transcript
-          const transcript = rawTranscript.toLowerCase()
+          // Get the latest result
+          const lastResult = event.results[event.results.length - 1]
+          if (!lastResult.isFinal) return
+          const rawTranscript = lastResult[0].transcript.trim()
+          if (!rawTranscript) return
           
-          if (isContinuousMicRef.current) {
-            if (transcript.includes("miaw")) {
-              setChatInput(rawTranscript)
-              handleSendMessage(rawTranscript)
-            }
-          } else {
-            setChatInput(rawTranscript)
-            handleSendMessage(rawTranscript)
-          }
+          setChatInput(rawTranscript)
+          handleSendMessage(rawTranscript)
         }
 
         recognitionRef.current.onerror = (event: any) => {
-          if (event.error === 'no-speech' || event.error === 'aborted') {
-            // Silently ignore during TTS or idle periods
-          } else {
+          // no-speech and aborted are expected during TTS or silence
+          if (event.error !== 'no-speech' && event.error !== 'aborted') {
             console.warn("Speech API Error:", event.error)
           }
-          setIsListening(false)
         }
 
         recognitionRef.current.onend = () => {
           setIsListening(false)
-          // Only auto-restart if continuous mode is on AND Miaw is NOT speaking
+          // Auto-restart if continuous mode is on AND Miaw is NOT speaking
           if (isContinuousMicRef.current && !isSpeakingRef.current) {
             setTimeout(() => {
               if (isContinuousMicRef.current && !isSpeakingRef.current && recognitionRef.current) {
-                try {
-                  recognitionRef.current.start()
-                } catch (e) {
-                  // Already running, ignore
-                }
+                try { recognitionRef.current.start() } catch (e) {}
               }
-            }, 300)
+            }, 500)
           }
         }
       }
@@ -454,16 +441,19 @@ export default function Home() {
     if (!recognitionRef.current) return
     try {
       if (isContinuousMic) {
+        // Turn OFF
         setIsContinuousMic(false)
         isContinuousMicRef.current = false
-        if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current)
-        if (isListening) recognitionRef.current.stop()
+        isSpeakingRef.current = false
+        try { recognitionRef.current.stop() } catch (e) {}
         setActiveMiawState("idleCalm")
         setIsListening(false)
       } else {
+        // Turn ON
         setIsContinuousMic(true)
         isContinuousMicRef.current = true
-        if (!isListening) recognitionRef.current.start()
+        isSpeakingRef.current = false
+        try { recognitionRef.current.start() } catch (e) {}
       }
       resetInactivityTimers()
     } catch (err) {
