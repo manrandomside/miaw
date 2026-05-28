@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Miaw, STATES } from "@/components/Miaw"
 import { SpotifyPlayer, DEMO_SONGS } from "@/components/SpotifyPlayer"
@@ -20,6 +20,10 @@ import {
   Zap,
   Headphones,
   ArrowLeft,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
 } from "lucide-react"
 
 const ESP32_BASE_URL = "http://192.168.254.156"
@@ -46,6 +50,25 @@ export default function Home() {
   const [lastReply, setLastReply] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Speech Recognition (STT) State
+  const [isListening, setIsListening] = useState(false)
+  const [sttSupported, setSttSupported] = useState(true)
+
+  // Speech Synthesis (TTS) State
+  const [isMuted, setIsMuted] = useState(false)
+  const [ttsSupported, setTtsSupported] = useState(true)
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      if (!("SpeechRecognition" in window || "webkitSpeechRecognition" in window)) {
+        setSttSupported(false)
+      }
+      if (!("speechSynthesis" in window)) {
+        setTtsSupported(false)
+      }
+    }
+  }, [])
+
   const dispatchESP32Action = useCallback(async (endpoint: string, method: string) => {
     try {
       await fetch(`${ESP32_BASE_URL}${endpoint}`, {
@@ -57,8 +80,27 @@ export default function Home() {
     }
   }, [])
 
-  const handleSendMessage = useCallback(async () => {
-    const message = chatInput.trim()
+  const speakReply = useCallback((text: string) => {
+    if (isMuted || !ttsSupported || typeof window === "undefined") return
+    
+    try {
+      const synth = window.speechSynthesis
+      synth.cancel() // Stop any current speech
+      const utterance = new SpeechSynthesisUtterance(text)
+      
+      const voices = synth.getVoices()
+      const idVoice = voices.find(v => v.lang === "id-ID" || v.lang === "id")
+      if (idVoice) utterance.voice = idVoice
+      
+      utterance.lang = "id-ID"
+      synth.speak(utterance)
+    } catch (err) {
+      console.warn("Speech Synthesis failed:", err)
+    }
+  }, [isMuted, ttsSupported])
+
+  const handleSendMessage = useCallback(async (overrideMessage?: string) => {
+    const message = (overrideMessage || chatInput).trim()
     if (!message || isLoading) return
 
     setChatInput("")
@@ -80,6 +122,7 @@ export default function Home() {
         setActiveMiawState("confused")
         const errorReply = data.reply || "Miaw tidak bisa memproses permintaan."
         setLastReply(errorReply)
+        speakReply(errorReply)
         setChatLog((prev) => [
           ...prev,
           { role: "miaw", text: errorReply, expression: "confused" },
@@ -99,6 +142,7 @@ export default function Home() {
       }, 1500)
 
       setLastReply(data.reply)
+      speakReply(data.reply)
 
       let actionFired: string | null = null
       if (data.action?.endpoint) {
@@ -119,6 +163,7 @@ export default function Home() {
       setActiveMiawState("confused")
       const errorReply = "Koneksi ke server AI terputus."
       setLastReply(errorReply)
+      speakReply(errorReply)
       setChatLog((prev) => [
         ...prev,
         { role: "miaw", text: errorReply, expression: "confused" },
@@ -127,7 +172,50 @@ export default function Home() {
       setIsLoading(false)
       inputRef.current?.focus()
     }
-  }, [chatInput, isLoading, dispatchESP32Action])
+  }, [chatInput, isLoading, dispatchESP32Action, speakReply])
+
+  const handleMicClick = useCallback(() => {
+    if (typeof window === "undefined") return
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    
+    if (!SpeechRecognition) {
+      setSttSupported(false)
+      console.warn("SpeechRecognition API not supported in this browser.")
+      return
+    }
+
+    const recognition = new SpeechRecognition()
+    recognition.lang = "id-ID"
+    recognition.continuous = false
+    recognition.interimResults = false
+
+    recognition.onstart = () => {
+      setIsListening(true)
+      setActiveMiawState("listening")
+    }
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      const transcript = event.results[0][0].transcript
+      setChatInput(transcript)
+      handleSendMessage(transcript)
+    }
+
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      console.warn("Speech recognition error", event.error)
+      setIsListening(false)
+      setActiveMiawState("idleCalm")
+    }
+
+    recognition.onend = () => {
+      setIsListening(false)
+    }
+
+    try {
+      recognition.start()
+    } catch (err) {
+      console.warn("SpeechRecognition start failed", err)
+    }
+  }, [handleSendMessage])
 
   return (
     <div className="min-h-screen flex flex-col font-sans selection:bg-black selection:text-white bg-[#f4f4f0] dark:bg-zinc-950">
@@ -233,9 +321,26 @@ export default function Home() {
                       disabled={isLoading}
                       className="flex-1 border-[3px] border-black bg-white px-4 py-3 text-base font-bold text-black placeholder:text-zinc-400 focus:outline-none focus:ring-0 focus:bg-[#fffef5] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50 dark:bg-zinc-800 dark:text-white dark:placeholder:text-zinc-500"
                     />
+                    
+                    {sttSupported && (
+                      <Button
+                        onClick={handleMicClick}
+                        disabled={isLoading}
+                        size="lg"
+                        className={`px-4 shrink-0 border-[3px] border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-colors ${
+                          isListening 
+                            ? "bg-red-500 text-white hover:bg-red-600" 
+                            : "bg-white text-black hover:bg-zinc-100 dark:bg-zinc-800 dark:text-white dark:hover:bg-zinc-700"
+                        }`}
+                        title={isListening ? "Listening..." : "Click to speak"}
+                      >
+                        {isListening ? <MicOff className="size-6 animate-pulse" /> : <Mic className="size-6" />}
+                      </Button>
+                    )}
+
                     <Button
-                      onClick={handleSendMessage}
-                      disabled={isLoading || !chatInput.trim()}
+                      onClick={() => handleSendMessage()}
+                      disabled={isLoading || (!chatInput.trim() && !isListening)}
                       size="lg"
                       className="px-6 shrink-0 border-[3px] border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
                     >
@@ -273,11 +378,29 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* Manual State Triggers */}
+                  {/* Manual State Triggers & Settings */}
                   <div className="space-y-3">
-                    <h3 className="font-black text-sm uppercase tracking-wider text-black dark:text-white">
-                      Manual State Triggers
-                    </h3>
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-black text-sm uppercase tracking-wider text-black dark:text-white">
+                        Manual State Triggers
+                      </h3>
+                      {ttsSupported && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsMuted(!isMuted)}
+                          className={`font-black text-xs px-3 border-[2px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+                            isMuted 
+                              ? "bg-zinc-200 text-black hover:bg-zinc-300 dark:bg-zinc-700 dark:text-white dark:hover:bg-zinc-600" 
+                              : "bg-[#4ade80] text-black hover:bg-[#22c55e]"
+                          }`}
+                          title={isMuted ? "Unmute Voice" : "Mute Voice"}
+                        >
+                          {isMuted ? <VolumeX className="size-4 mr-2" /> : <Volume2 className="size-4 mr-2" />}
+                          {isMuted ? "Voice Muted" : "Voice On"}
+                        </Button>
+                      )}
+                    </div>
                     <div className="flex flex-wrap gap-2">
                       {(Object.keys(STATES) as Array<keyof typeof STATES>).map((stateKey) => {
                         const isSelected = activeMiawState === stateKey
