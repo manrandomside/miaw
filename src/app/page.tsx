@@ -154,6 +154,23 @@ export default function Home() {
     }
   }, [])
 
+  const handleManualLampToggle = useCallback(async (lampId: "lamp1" | "lamp2" | "lamp3") => {
+    const endpoints = {
+      lamp1: "/tamu",
+      lamp2: "/kamar",
+      lamp3: "/dapur",
+    }
+    const endpoint = endpoints[lampId]
+    try {
+      await fetch(`${ESP32_BASE_URL}${endpoint}`, {
+        method: "POST",
+        mode: "no-cors",
+      })
+    } catch (err) {
+      console.warn(`Manual toggle failed for ${lampId}:`, err)
+    }
+  }, [])
+
   const speakReply = useCallback((text: string, targetExpression?: keyof typeof STATES) => {
     const handleMicRestart = () => {
       if (isContinuousMicRef.current && recognitionRef.current) {
@@ -629,30 +646,30 @@ export default function Home() {
                     <Lightbulb className="size-6 text-black dark:text-white" />
                   </div>
                   <div className="space-y-3 font-bold text-sm">
-                    <div className="flex justify-between items-center border-[3px] border-black bg-white px-3 py-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:bg-zinc-800">
+                    <button onClick={() => handleManualLampToggle('lamp1')} className="w-full flex justify-between items-center border-[3px] border-black bg-white px-3 py-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all dark:bg-zinc-800">
                       <span className="text-black dark:text-white">Lamp 1 (Living Room)</span>
                       {!telemetryError && telemetry?.lamps.lamp1 ? (
                         <span className="text-xs font-black uppercase bg-green-200 border-[2px] border-black px-2 py-0.5 text-black dark:bg-green-950 dark:text-green-300">On</span>
                       ) : (
                         <span className="text-xs font-black uppercase bg-red-200 border-[2px] border-black px-2 py-0.5 text-black dark:bg-red-950 dark:text-red-300">Off</span>
                       )}
-                    </div>
-                    <div className="flex justify-between items-center border-[3px] border-black bg-white px-3 py-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:bg-zinc-800">
+                    </button>
+                    <button onClick={() => handleManualLampToggle('lamp2')} className="w-full flex justify-between items-center border-[3px] border-black bg-white px-3 py-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all dark:bg-zinc-800">
                       <span className="text-black dark:text-white">Lamp 2 (Bedroom)</span>
                       {!telemetryError && telemetry?.lamps.lamp2 ? (
                         <span className="text-xs font-black uppercase bg-green-200 border-[2px] border-black px-2 py-0.5 text-black dark:bg-green-950 dark:text-green-300">On</span>
                       ) : (
                         <span className="text-xs font-black uppercase bg-red-200 border-[2px] border-black px-2 py-0.5 text-black dark:bg-red-950 dark:text-red-300">Off</span>
                       )}
-                    </div>
-                    <div className="flex justify-between items-center border-[3px] border-black bg-white px-3 py-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:bg-zinc-800">
+                    </button>
+                    <button onClick={() => handleManualLampToggle('lamp3')} className="w-full flex justify-between items-center border-[3px] border-black bg-white px-3 py-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all dark:bg-zinc-800">
                       <span className="text-black dark:text-white">Lamp 3 (Kitchen)</span>
                       {!telemetryError && telemetry?.lamps.lamp3 ? (
                         <span className="text-xs font-black uppercase bg-green-200 border-[2px] border-black px-2 py-0.5 text-black dark:bg-green-950 dark:text-green-300">On</span>
                       ) : (
                         <span className="text-xs font-black uppercase bg-red-200 border-[2px] border-black px-2 py-0.5 text-black dark:bg-red-950 dark:text-red-300">Off</span>
                       )}
-                    </div>
+                    </button>
                   </div>
                 </div>
               </div>
