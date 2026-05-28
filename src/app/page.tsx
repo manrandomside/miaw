@@ -861,7 +861,7 @@ export default function Home() {
                   </div>
                   <div className="space-y-3 font-bold text-sm">
                     <button onClick={() => handleManualLampToggle('lamp1')} className="w-full flex justify-between items-center border-[3px] border-black bg-white px-3 py-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all dark:bg-zinc-800">
-                      <span className="text-black dark:text-white">Lamp 1 (Living Room)</span>
+                      <span className="text-black dark:text-white">Lamp 1 (Bedroom)</span>
                       {!telemetryError && telemetry?.lamps.lamp1 ? (
                         <span className="text-xs font-black uppercase bg-green-200 border-[2px] border-black px-2 py-0.5 text-black dark:bg-green-950 dark:text-green-300">On</span>
                       ) : (
@@ -869,7 +869,7 @@ export default function Home() {
                       )}
                     </button>
                     <button onClick={() => handleManualLampToggle('lamp2')} className="w-full flex justify-between items-center border-[3px] border-black bg-white px-3 py-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all dark:bg-zinc-800">
-                      <span className="text-black dark:text-white">Lamp 2 (Bedroom)</span>
+                      <span className="text-black dark:text-white">Lamp 2 (Kitchen)</span>
                       {!telemetryError && telemetry?.lamps.lamp2 ? (
                         <span className="text-xs font-black uppercase bg-green-200 border-[2px] border-black px-2 py-0.5 text-black dark:bg-green-950 dark:text-green-300">On</span>
                       ) : (
@@ -877,7 +877,7 @@ export default function Home() {
                       )}
                     </button>
                     <button onClick={() => handleManualLampToggle('lamp3')} className="w-full flex justify-between items-center border-[3px] border-black bg-white px-3 py-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all dark:bg-zinc-800">
-                      <span className="text-black dark:text-white">Lamp 3 (Kitchen)</span>
+                      <span className="text-black dark:text-white">Lamp 3 (Bathroom)</span>
                       {!telemetryError && telemetry?.lamps.lamp3 ? (
                         <span className="text-xs font-black uppercase bg-green-200 border-[2px] border-black px-2 py-0.5 text-black dark:bg-green-950 dark:text-green-300">On</span>
                       ) : (
