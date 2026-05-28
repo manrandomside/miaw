@@ -50,9 +50,15 @@ export default function Home() {
   const [lastReply, setLastReply] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Advanced State Machine Refs
+  const groomingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const sleepingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const expressionTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
   // Speech Recognition (STT) State
   const [isListening, setIsListening] = useState(false)
   const [sttSupported, setSttSupported] = useState(true)
+  const recognitionRef = useRef<any>(null)
 
   // Speech Synthesis (TTS) State
   const [isMuted, setIsMuted] = useState(false)
@@ -60,12 +66,69 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      if (!("SpeechRecognition" in window || "webkitSpeechRecognition" in window)) {
+      const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition
+      if (!SpeechRecognition) {
         setSttSupported(false)
+      } else {
+        recognitionRef.current = new SpeechRecognition()
+        recognitionRef.current.continuous = false
+        recognitionRef.current.lang = "id-ID"
+        recognitionRef.current.interimResults = false
+
+        recognitionRef.current.onstart = () => {
+          setIsListening(true)
+          setActiveMiawState("listening")
+        }
+
+        recognitionRef.current.onresult = (event: any) => {
+          const transcript = event.results[0][0].transcript
+          setChatInput(transcript)
+          // Use setTimeout to ensure state updates propagate or trigger action manually
+          handleSendMessage(transcript)
+        }
+
+        recognitionRef.current.onerror = (event: any) => {
+          console.warn("Speech API Error:", event.error)
+          setIsListening(false)
+          setActiveMiawState("idleCalm")
+        }
+
+        recognitionRef.current.onend = () => {
+          setIsListening(false)
+        }
       }
+
       if (!("speechSynthesis" in window)) {
         setTtsSupported(false)
       }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const resetInactivityTimers = useCallback(() => {
+    if (groomingTimeoutRef.current) clearTimeout(groomingTimeoutRef.current)
+    if (sleepingTimeoutRef.current) clearTimeout(sleepingTimeoutRef.current)
+
+    groomingTimeoutRef.current = setTimeout(() => {
+      setActiveMiawState((current) => {
+        if (current === "idleCalm" || current === "sleeping") {
+          setTimeout(() => setActiveMiawState("idleCalm"), 5000)
+          return "grooming"
+        }
+        return current
+      })
+    }, 15000)
+
+    sleepingTimeoutRef.current = setTimeout(() => {
+      setActiveMiawState("sleeping")
+    }, 45000)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (groomingTimeoutRef.current) clearTimeout(groomingTimeoutRef.current)
+      if (sleepingTimeoutRef.current) clearTimeout(sleepingTimeoutRef.current)
+      if (expressionTimeoutRef.current) clearTimeout(expressionTimeoutRef.current)
     }
   }, [])
 
@@ -80,8 +143,20 @@ export default function Home() {
     }
   }, [])
 
-  const speakReply = useCallback((text: string) => {
-    if (isMuted || !ttsSupported || typeof window === "undefined") return
+  const speakReply = useCallback((text: string, targetExpression?: keyof typeof STATES) => {
+    if (isMuted || !ttsSupported || typeof window === "undefined") {
+      if (targetExpression && STATES[targetExpression]) {
+        setActiveMiawState(targetExpression)
+        expressionTimeoutRef.current = setTimeout(() => {
+          setActiveMiawState("idleCalm")
+          resetInactivityTimers()
+        }, 2000)
+      } else {
+        setActiveMiawState("idleCalm")
+        resetInactivityTimers()
+      }
+      return
+    }
     
     try {
       const synth = window.speechSynthesis
@@ -89,15 +164,44 @@ export default function Home() {
       const utterance = new SpeechSynthesisUtterance(text)
       
       const voices = synth.getVoices()
-      const idVoice = voices.find(v => v.lang === "id-ID" || v.lang === "id")
-      if (idVoice) utterance.voice = idVoice
+      const idVoices = voices.filter(v => v.lang.includes("id"))
+      const googleVoice = idVoices.find(v => v.name.toLowerCase().includes("google"))
+      
+      if (googleVoice) {
+        utterance.voice = googleVoice
+      } else if (idVoices.length > 0) {
+        utterance.voice = idVoices[0]
+      }
       
       utterance.lang = "id-ID"
+
+      setActiveMiawState("speaking")
+
+      utterance.onend = () => {
+        if (targetExpression && STATES[targetExpression]) {
+          setActiveMiawState(targetExpression)
+        } else {
+          setActiveMiawState("idleCalm")
+        }
+        
+        expressionTimeoutRef.current = setTimeout(() => {
+          setActiveMiawState("idleCalm")
+          resetInactivityTimers()
+        }, 2000)
+      }
+
+      utterance.onerror = () => {
+        setActiveMiawState("idleCalm")
+        resetInactivityTimers()
+      }
+
       synth.speak(utterance)
     } catch (err) {
       console.warn("Speech Synthesis failed:", err)
+      setActiveMiawState("idleCalm")
+      resetInactivityTimers()
     }
-  }, [isMuted, ttsSupported])
+  }, [isMuted, ttsSupported, resetInactivityTimers])
 
   const handleSendMessage = useCallback(async (overrideMessage?: string) => {
     const message = (overrideMessage || chatInput).trim()
@@ -122,27 +226,17 @@ export default function Home() {
         setActiveMiawState("confused")
         const errorReply = data.reply || "Miaw tidak bisa memproses permintaan."
         setLastReply(errorReply)
-        speakReply(errorReply)
+        speakReply(errorReply, "confused")
         setChatLog((prev) => [
           ...prev,
           { role: "miaw", text: errorReply, expression: "confused" },
         ])
+        resetInactivityTimers()
         return
       }
 
-      setActiveMiawState("speaking")
-
-      setTimeout(() => {
-        const expr = (data.expression || "speaking") as keyof typeof STATES
-        if (STATES[expr]) {
-          setActiveMiawState(expr)
-        } else {
-          setActiveMiawState("speaking")
-        }
-      }, 1500)
-
       setLastReply(data.reply)
-      speakReply(data.reply)
+      speakReply(data.reply, (data.expression as keyof typeof STATES) || "speaking")
 
       let actionFired: string | null = null
       if (data.action?.endpoint) {
@@ -163,59 +257,31 @@ export default function Home() {
       setActiveMiawState("confused")
       const errorReply = "Koneksi ke server AI terputus."
       setLastReply(errorReply)
-      speakReply(errorReply)
+      speakReply(errorReply, "confused")
       setChatLog((prev) => [
         ...prev,
         { role: "miaw", text: errorReply, expression: "confused" },
       ])
+      resetInactivityTimers()
     } finally {
       setIsLoading(false)
       inputRef.current?.focus()
     }
   }, [chatInput, isLoading, dispatchESP32Action, speakReply])
 
-  const handleMicClick = useCallback(() => {
-    if (typeof window === "undefined") return
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    
-    if (!SpeechRecognition) {
-      setSttSupported(false)
-      console.warn("SpeechRecognition API not supported in this browser.")
-      return
-    }
-
-    const recognition = new SpeechRecognition()
-    recognition.lang = "id-ID"
-    recognition.continuous = false
-    recognition.interimResults = false
-
-    recognition.onstart = () => {
-      setIsListening(true)
-      setActiveMiawState("listening")
-    }
-
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      const transcript = event.results[0][0].transcript
-      setChatInput(transcript)
-      handleSendMessage(transcript)
-    }
-
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.warn("Speech recognition error", event.error)
-      setIsListening(false)
-      setActiveMiawState("idleCalm")
-    }
-
-    recognition.onend = () => {
-      setIsListening(false)
-    }
-
+  const toggleListening = useCallback(() => {
+    if (!recognitionRef.current) return
     try {
-      recognition.start()
+      if (isListening) {
+        recognitionRef.current.stop()
+      } else {
+        recognitionRef.current.start()
+      }
+      resetInactivityTimers()
     } catch (err) {
-      console.warn("SpeechRecognition start failed", err)
+      console.warn("Failed to toggle speech recognition", err)
     }
-  }, [handleSendMessage])
+  }, [isListening, resetInactivityTimers])
 
   return (
     <div className="min-h-screen flex flex-col font-sans selection:bg-black selection:text-white bg-[#f4f4f0] dark:bg-zinc-950">
@@ -324,7 +390,7 @@ export default function Home() {
                     
                     {sttSupported && (
                       <Button
-                        onClick={handleMicClick}
+                        onClick={toggleListening}
                         disabled={isLoading}
                         size="lg"
                         className={`px-4 shrink-0 border-[3px] border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-colors ${
