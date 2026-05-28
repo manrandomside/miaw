@@ -47,6 +47,7 @@ Rules:
 - If the user asks to schedule an action (e.g., '10 menit lagi', 'nanti jam...'), set action to null and fill the "schedule" object.
 - If the user asks about the weather/temperature, read the Sensor Data, set action to null, and tell them.
 - If the user asks to play/pause music, set the "media" field accordingly.
+- If an image is provided and the user asks about it, analyze the image and describe what you see.
 - If the user greets you, respond warmly and set expression to "happy".
 - For general conversation, set expression to "speaking", action endpoint to null, media to null, schedule to null.
 
@@ -54,10 +55,11 @@ CRITICAL: OUTPUT ONLY VALID JSON. DO NOT WRAP IN MARKDOWN MACROS. NO \`\`\`json.
 }
 
 function sanitizeJsonResponse(raw: string): string {
-  let cleaned = raw.trim()
-  cleaned = cleaned.replace(/^```(?:json)?\s*/i, "")
-  cleaned = cleaned.replace(/\s*```$/i, "")
-  return cleaned.trim()
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (match) {
+    return match[0];
+  }
+  return raw;
 }
 
 interface ChatRequest {
@@ -132,7 +134,7 @@ export async function POST(request: NextRequest) {
       model: modelName,
       temperature: 0.7,
       max_tokens: 500,
-      response_format: { type: "json_object" },
+      ...(body.imageBase64 ? {} : { response_format: { type: "json_object" } }),
     })
 
     const rawContent = completion.choices[0]?.message?.content || ""
