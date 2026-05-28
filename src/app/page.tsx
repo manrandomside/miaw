@@ -59,6 +59,8 @@ export default function Home() {
   const [isListening, setIsListening] = useState(false)
   const [sttSupported, setSttSupported] = useState(true)
   const recognitionRef = useRef<any>(null)
+  const [isContinuousMic, setIsContinuousMic] = useState(false)
+  const isContinuousMicRef = useRef(false)
 
   // Speech Synthesis (TTS) State
   const [isMuted, setIsMuted] = useState(false)
@@ -109,19 +111,26 @@ export default function Home() {
     if (groomingTimeoutRef.current) clearTimeout(groomingTimeoutRef.current)
     if (sleepingTimeoutRef.current) clearTimeout(sleepingTimeoutRef.current)
 
+    const groomingTime = Math.floor(Math.random() * 2000) + 3000
     groomingTimeoutRef.current = setTimeout(() => {
       setActiveMiawState((current) => {
-        if (current === "idleCalm" || current === "sleeping") {
-          setTimeout(() => setActiveMiawState("idleCalm"), 5000)
+        if (current === "idleCalm") {
+          setTimeout(() => setActiveMiawState((state) => state === "grooming" ? "idleCalm" : state), 5000)
           return "grooming"
         }
         return current
       })
-    }, 15000)
+    }, groomingTime)
 
+    const sleepingTime = Math.floor(Math.random() * 1000) + 9000
     sleepingTimeoutRef.current = setTimeout(() => {
-      setActiveMiawState("sleeping")
-    }, 45000)
+      setActiveMiawState((current) => {
+        if (current === "idleCalm") {
+          return "sleeping"
+        }
+        return current
+      })
+    }, sleepingTime)
   }, [])
 
   useEffect(() => {
@@ -144,16 +153,28 @@ export default function Home() {
   }, [])
 
   const speakReply = useCallback((text: string, targetExpression?: keyof typeof STATES) => {
+    const handleMicRestart = () => {
+      if (isContinuousMicRef.current && recognitionRef.current) {
+        try {
+          recognitionRef.current.start()
+        } catch (e) {
+          console.warn("Continuous Mic restart failed:", e)
+        }
+      }
+    }
+
     if (isMuted || !ttsSupported || typeof window === "undefined") {
       if (targetExpression && STATES[targetExpression]) {
         setActiveMiawState(targetExpression)
         expressionTimeoutRef.current = setTimeout(() => {
           setActiveMiawState("idleCalm")
           resetInactivityTimers()
+          handleMicRestart()
         }, 2000)
       } else {
         setActiveMiawState("idleCalm")
         resetInactivityTimers()
+        handleMicRestart()
       }
       return
     }
@@ -174,6 +195,8 @@ export default function Home() {
       }
       
       utterance.lang = "id-ID"
+      utterance.pitch = 1.4
+      utterance.rate = 1.05
 
       setActiveMiawState("speaking")
 
@@ -187,12 +210,14 @@ export default function Home() {
         expressionTimeoutRef.current = setTimeout(() => {
           setActiveMiawState("idleCalm")
           resetInactivityTimers()
+          handleMicRestart()
         }, 2000)
       }
 
       utterance.onerror = () => {
         setActiveMiawState("idleCalm")
         resetInactivityTimers()
+        handleMicRestart()
       }
 
       synth.speak(utterance)
@@ -272,16 +297,22 @@ export default function Home() {
   const toggleListening = useCallback(() => {
     if (!recognitionRef.current) return
     try {
-      if (isListening) {
-        recognitionRef.current.stop()
+      if (isContinuousMic) {
+        setIsContinuousMic(false)
+        isContinuousMicRef.current = false
+        if (isListening) recognitionRef.current.stop()
+        setActiveMiawState("idleCalm")
+        setIsListening(false)
       } else {
-        recognitionRef.current.start()
+        setIsContinuousMic(true)
+        isContinuousMicRef.current = true
+        if (!isListening) recognitionRef.current.start()
       }
       resetInactivityTimers()
     } catch (err) {
       console.warn("Failed to toggle speech recognition", err)
     }
-  }, [isListening, resetInactivityTimers])
+  }, [isContinuousMic, isListening, resetInactivityTimers])
 
   return (
     <div className="min-h-screen flex flex-col font-sans selection:bg-black selection:text-white bg-[#f4f4f0] dark:bg-zinc-950">
@@ -394,13 +425,15 @@ export default function Home() {
                         disabled={isLoading}
                         size="lg"
                         className={`px-4 shrink-0 border-[3px] border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-colors ${
-                          isListening 
-                            ? "bg-red-500 text-white hover:bg-red-600" 
+                          isContinuousMic 
+                            ? "bg-red-500 text-white hover:bg-red-600 animate-[pulse_1.5s_ease-in-out_infinite]" 
+                            : isListening
+                            ? "bg-red-400 text-white"
                             : "bg-white text-black hover:bg-zinc-100 dark:bg-zinc-800 dark:text-white dark:hover:bg-zinc-700"
                         }`}
-                        title={isListening ? "Listening..." : "Click to speak"}
+                        title={isContinuousMic ? "Continuous Mic Active (Listening)" : "Click to enable Continuous Mic"}
                       >
-                        {isListening ? <MicOff className="size-6 animate-pulse" /> : <Mic className="size-6" />}
+                        {isContinuousMic || isListening ? <MicOff className="size-6" /> : <Mic className="size-6" />}
                       </Button>
                     )}
 
