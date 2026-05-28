@@ -63,6 +63,9 @@ export default function Home() {
   const [lastReply, setLastReply] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Ref agar voice handler SELALU menggunakan versi terbaru handleSendMessage
+  const handleSendMessageRef = useRef<(msg?: string) => void>(() => {})
+
   // Advanced State Machine Refs
   const groomingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const sleepingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -151,7 +154,7 @@ export default function Home() {
           try { recognitionRef.current.stop() } catch (e) {}
           
           setChatInput(rawTranscript)
-          handleSendMessage(rawTranscript)
+          handleSendMessageRef.current(rawTranscript)
         }
 
         recognitionRef.current.onerror = (event: any) => {
@@ -480,6 +483,11 @@ export default function Home() {
       inputRef.current?.focus()
     }
   }, [chatInput, isLoading, dispatchESP32Action, speakReply, telemetry])
+
+  // Selalu update ref ke versi terbaru handleSendMessage
+  useEffect(() => {
+    handleSendMessageRef.current = handleSendMessage
+  }, [handleSendMessage])
 
   const toggleListening = useCallback(() => {
     playClick()
