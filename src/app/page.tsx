@@ -88,18 +88,18 @@ export default function Home() {
 
   // Sync state to ESP32 OLED
   useEffect(() => {
-    fetch(`/api/esp32?endpoint=/state&method=POST`, {
-      method: "POST",
-      body: activeMiawState
-    }).catch(() => {}) // Ignore errors if ESP32 is offline
+    supabase.from("miaw_commands").insert({
+      endpoint: `/state?val=${activeMiawState}`,
+      status: "pending"
+    }).then()
   }, [activeMiawState])
 
   // Sync dashboard visibility to ESP32
   useEffect(() => {
-    fetch(`/api/esp32?endpoint=/dash&method=POST`, {
-      method: "POST",
-      body: showDashboard ? "1" : "0"
-    }).catch(() => {})
+    supabase.from("miaw_commands").insert({
+      endpoint: `/dash?val=${showDashboard ? "1" : "0"}`,
+      status: "pending"
+    }).then()
   }, [showDashboard])
 
   // Fetch Memories on Mount
@@ -231,8 +231,9 @@ export default function Home() {
 
   const dispatchESP32Action = useCallback(async (endpoint: string, method: string) => {
     try {
-      await fetch(`/api/esp32?endpoint=${encodeURIComponent(endpoint)}&method=${method}`, {
-        method: "POST",
+      await supabase.from("miaw_commands").insert({
+        endpoint,
+        status: "pending"
       })
     } catch {
       // ESP32 may be unreachable; silently fail
@@ -249,8 +250,9 @@ export default function Home() {
     }
     const endpoint = endpoints[lampId]
     try {
-      await fetch(`/api/esp32?endpoint=${encodeURIComponent(endpoint)}&method=POST`, {
-        method: "POST",
+      await supabase.from("miaw_commands").insert({
+        endpoint,
+        status: "pending"
       })
     } catch (err) {
       console.warn(`Manual toggle failed for ${lampId}:`, err)
