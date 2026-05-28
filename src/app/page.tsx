@@ -56,6 +56,7 @@ export default function Home() {
   const [isVisionActive, setIsVisionActive] = useState(false)
 
   const [chatInput, setChatInput] = useState("")
+  const [showDashboard, setShowDashboard] = useState(false)
   const [chatLog, setChatLog] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [lastReply, setLastReply] = useState<string | null>(null)
@@ -87,9 +88,19 @@ export default function Home() {
   useEffect(() => {
     fetch(`${ESP32_BASE_URL}/state`, {
       method: "POST",
+      mode: "no-cors",
       body: activeMiawState
     }).catch(() => {}) // Ignore errors if ESP32 is offline
   }, [activeMiawState])
+
+  // Sync dashboard visibility to ESP32
+  useEffect(() => {
+    fetch(`${ESP32_BASE_URL}/dash`, {
+      method: "POST",
+      mode: "no-cors",
+      body: showDashboard ? "1" : "0"
+    }).catch(() => {})
+  }, [showDashboard])
 
   // Fetch Memories on Mount
   useEffect(() => {
@@ -220,9 +231,9 @@ export default function Home() {
 
   const handleManualLampToggle = useCallback(async (lampId: "lamp1" | "lamp2" | "lamp3") => {
     const endpoints = {
-      lamp1: "/tamu",
-      lamp2: "/kamar",
-      lamp3: "/dapur",
+      lamp1: "/bedroom",
+      lamp2: "/kitchen",
+      lamp3: "/bathroom",
     }
     const endpoint = endpoints[lampId]
     try {
@@ -773,12 +784,21 @@ export default function Home() {
                     >
                       {animate ? "Pause" : "Play"}
                     </Button>
+                    <Button
+                      variant={showDashboard ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setShowDashboard(!showDashboard)}
+                      className={`font-black text-xs px-4 ml-2 border-[2px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${showDashboard ? "bg-[#ffde43] text-black" : "hover:bg-zinc-100"}`}
+                    >
+                      {showDashboard ? "Hide Sensors" : "Show Sensors"}
+                    </Button>
                   </div>
                 </div>
               </div>
             </section>
 
             {/* Dashboard Grid (ESP32 Live Telemetry) */}
+            {showDashboard && (
             <section className="space-y-6">
               <h2 className="text-2xl font-black uppercase tracking-wider border-b-[4px] border-black pb-2 text-black dark:text-white text-center sm:text-left">
                 ESP32 Dashboard Telemetry
@@ -868,6 +888,7 @@ export default function Home() {
                 </div>
               </div>
             </section>
+            )}
           </div>
         )}
 

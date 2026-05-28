@@ -18,8 +18,8 @@ export function useTelemetry() {
   useEffect(() => {
     const fetchTelemetry = async () => {
       try {
-        const res = await fetch("http://192.168.254.156/sensors")
-        if (!res.ok) throw new Error("Failed to fetch")
+        const res = await fetch("http://192.168.254.156/telemetry")
+        if (!res.ok) throw new Error("Failed to fetch telemetry")
         
         const json = (await res.json()) as TelemetryData
         setData(json)
