@@ -17,9 +17,9 @@ export async function GET() {
 
     const data = await res.json()
     return NextResponse.json(data)
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json(
-      { error: err?.message || "ESP32 unreachable", offline: true },
+      { error: err instanceof Error ? err.message : "ESP32 unreachable", offline: true },
       { status: 503 }
     )
   }

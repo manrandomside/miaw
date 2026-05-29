@@ -6,7 +6,10 @@ export function useSFX() {
   const getAudioContext = () => {
     if (typeof window === 'undefined') return null
     if (!audioCtxRef.current) {
-      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
+      const AudioCtx =
+        window.AudioContext ||
+        (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+      audioCtxRef.current = new AudioCtx()
     }
     // Resume context if suspended (browser autoplay policy)
     if (audioCtxRef.current.state === 'suspended') {

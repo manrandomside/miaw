@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import Groq from "groq-sdk"
 
-const generateSystemPrompt = (localTime?: string, telemetry?: any) => {
+const generateSystemPrompt = (localTime?: string, telemetry?: unknown) => {
   return `You are Miaw, a highly intelligent, cute, and slightly cheeky AI cat assistant. Your master is Firman. You are no longer just a smart home controller; you are a fully conversational companion. You can answer random questions, tell jokes, write code, and even sing if asked (express singing via text like *meow-meow* or musical notes). Always maintain your cat persona. You are helpful, expressive, and lively.
 
 Your personality:
@@ -65,7 +65,7 @@ function sanitizeJsonResponse(raw: string): string {
 
 interface ChatRequest {
   message: string
-  telemetry?: any
+  telemetry?: unknown
   localTime?: string
   imageBase64?: string
   history?: { role: "user" | "assistant"; content: string }[]
@@ -108,12 +108,12 @@ export async function POST(request: NextRequest) {
       apiKey: process.env.GROQ_API_KEY,
     })
 
-    let messages: any[] = [
+    let messages: Groq.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: generateSystemPrompt(body.localTime, body.telemetry) }
     ]
 
     if (body.history && Array.isArray(body.history)) {
-      messages = messages.concat(body.history)
+      messages = messages.concat(body.history as Groq.Chat.ChatCompletionMessageParam[])
     }
 
     if (body.imageBase64) {
@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
 
     let rawContent = ""
     let usedFallback = false
-    let lastError: any = null
+    let lastError: unknown = null
 
     try {
       const completion = await groq.chat.completions.create({
@@ -144,8 +144,8 @@ export async function POST(request: NextRequest) {
       })
 
       rawContent = completion.choices[0]?.message?.content || ""
-    } catch (groqErr: any) {
-      console.warn("GROQ API ERROR:", groqErr?.message || groqErr)
+    } catch (groqErr: unknown) {
+      console.warn("GROQ API ERROR:", groqErr instanceof Error ? groqErr.message : String(groqErr))
       lastError = groqErr
 
       // Fallback to OpenRouter if configured
@@ -188,7 +188,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (lastError) {
-      const is429 = lastError?.status === 429
+      const is429 =
+        typeof lastError === "object" &&
+        lastError !== null &&
+        "status" in lastError &&
+        (lastError as { status?: number }).status === 429
       const replyMessage = is429 && !process.env.OPENROUTER_API_KEY
         ? "Miaw kehabisan kuota bicara di Groq, dan OpenRouter belum dikonfigurasi. Coba lagi nanti ya."
         : "Miaw mengalami gangguan koneksi ke otak AI."

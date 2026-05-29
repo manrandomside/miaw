@@ -13,6 +13,15 @@ export interface TelemetryData {
   }
 }
 
+interface TelemetryRow {
+  temperature: number
+  humidity: number
+  ldr: number
+  lamp1: boolean
+  lamp2: boolean
+  lamp3: boolean
+}
+
 export function useTelemetry() {
   const [data, setData] = useState<TelemetryData | null>(null)
   const [isError, setIsError] = useState(false)
@@ -42,7 +51,7 @@ export function useTelemetry() {
           setIsError(false)
           setIsOffline(false)
           consecutiveErrorsRef.current = 0
-        } catch (err) {
+        } catch {
           consecutiveErrorsRef.current += 1
           setIsError(true)
           if (consecutiveErrorsRef.current >= 3) setData(null)
@@ -57,7 +66,7 @@ export function useTelemetry() {
     // =============================================
     // MODE CLOUD: Supabase Realtime + Polling Fallback
     // =============================================
-    const mapRow = (row: any): TelemetryData => ({
+    const mapRow = (row: TelemetryRow): TelemetryData => ({
       temperature: row.temperature,
       humidity: row.humidity,
       ldr: row.ldr,
@@ -102,7 +111,7 @@ export function useTelemetry() {
           filter: 'id=eq.1'
         },
         (payload) => {
-          setData(mapRow(payload.new))
+          setData(mapRow(payload.new as TelemetryRow))
           setIsError(false)
           setIsOffline(false)
         }

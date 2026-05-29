@@ -17,9 +17,9 @@ export async function POST(req: NextRequest) {
 
     const text = await res.text()
     return NextResponse.json({ ok: true, data: text })
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json(
-      { ok: false, error: err?.message || "ESP32 unreachable" },
+      { ok: false, error: err instanceof Error ? err.message : "ESP32 unreachable" },
       { status: 503 }
     )
   }
