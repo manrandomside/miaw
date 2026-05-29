@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Miaw, STATES } from "@/components/Miaw"
-import { SpotifyPlayer, DEMO_SONGS } from "@/components/SpotifyPlayer"
+import { RadioPlayer, type RadioPlayerHandle } from "@/components/RadioPlayer"
 import type { MiawResponse } from "@/app/api/chat/route"
 import { useTelemetry } from "@/hooks/useTelemetry"
 import { useScheduler } from "@/hooks/useScheduler"
@@ -20,13 +20,12 @@ import {
   Sun,
   Lightbulb,
   ShieldAlert,
-  Music,
   Sliders,
   Send,
   Loader2,
   MessageSquare,
   Zap,
-  Headphones,
+  Radio,
   ArrowLeft,
   Mic,
   MicOff,
@@ -66,11 +65,10 @@ export default function Home() {
 
   const { playClick, playPop } = useSFX()
   const { data: telemetry, isError: telemetryError, isOnline: deviceOnline, lastSeen: deviceLastSeen } = useTelemetry()
-  const [activeView, setActiveView] = useState<"dashboard" | "lyrics">("dashboard")
-  
+  const [activeView, setActiveView] = useState<"dashboard" | "radio">("dashboard")
+
   const [activeMiawState, setActiveMiawState] = useState<keyof typeof STATES>("idleCalm")
-  const [activeSpotifyMode, setActiveSpotifyMode] = useState<"intro" | "playing" | "paused" | "noSong" | "changing">("playing")
-  const [songIndex, setSongIndex] = useState(0)
+  const radioRef = useRef<RadioPlayerHandle>(null)
   const [animSpeed, setAnimSpeed] = useState(1.0)
   const [animate, setAnimate] = useState(true)
 
@@ -488,11 +486,11 @@ export default function Home() {
           method: "POST"
         }).then()
       } else if (data.media) {
-        actionFired = `Spotify: ${data.media.toUpperCase()}`
-        if (data.media === "play") setActiveSpotifyMode("playing")
-        if (data.media === "pause") setActiveSpotifyMode("paused")
-        if (data.media === "next") setSongIndex((prev) => (prev + 1) % DEMO_SONGS.length)
-        if (data.media === "prev") setSongIndex((prev) => (prev - 1 < 0 ? DEMO_SONGS.length - 1 : prev - 1))
+        actionFired = `Radio: ${data.media.toUpperCase()}`
+        if (data.media === "play") radioRef.current?.play()
+        if (data.media === "pause") radioRef.current?.pause()
+        if (data.media === "next") radioRef.current?.next()
+        if (data.media === "prev") radioRef.current?.prev()
       } else if (data.action?.endpoint) {
         // Guard defensif: jangan kirim aksi hardware saat perangkat offline.
         // Biarkan balasan jujur Miaw soal offline yang tampil, tanpa fake action.
@@ -600,11 +598,11 @@ export default function Home() {
           <div className="flex items-center gap-1.5 sm:gap-4 shrink-0">
             {activeView === "dashboard" ? (
               <Button
-                onClick={() => setActiveView("lyrics")}
+                onClick={() => setActiveView("radio")}
                 className="flex items-center gap-2 border-[3px] border-black bg-[#60a5fa] px-4 py-2 text-sm font-black uppercase text-black hover:bg-[#3b82f6] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
               >
-                <Headphones className="size-4 sm:mr-1" />
-                <span className="hidden sm:inline">Open Miaw Lyrics</span>
+                <Radio className="size-4 sm:mr-1" />
+                <span className="hidden sm:inline">Open Miaw Radio</span>
               </Button>
             ) : (
               <Button
@@ -1022,100 +1020,33 @@ export default function Home() {
           </div>
         )}
 
-        {activeView === "lyrics" && (
+        {activeView === "radio" && (
           <div className="space-y-10">
-            {/* Centered Spotify Lyrics Player */}
+            {/* Internet Radio Player */}
             <section className="flex flex-col items-center">
-              <div className="w-full max-w-4xl border-[4px] border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between dark:bg-zinc-900">
+              <div className="w-full max-w-4xl border-[4px] border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col dark:bg-zinc-900">
                 <div className="space-y-6">
                   <div className="flex justify-between items-center">
                     <span className="border-[3px] border-black bg-[#60a5fa] text-black px-3 py-1 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                      Media & Lyrics Player
+                      Internet Radio Player
                     </span>
                     <span className="text-xs font-mono font-black uppercase text-zinc-500">
-                      Spotify Linker
+                      SomaFM Stream
                     </span>
                   </div>
 
                   <h2 className="text-3xl font-black uppercase tracking-tight text-black dark:text-white">
-                    Spotify Lyrics Screen
+                    Miaw Radio
                   </h2>
 
-                  {/* Styled Spotify Viewport */}
-                  <div className="border-[4px] border-black bg-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden h-64 sm:h-80 flex items-center justify-center">
-                    <SpotifyPlayer
-                      mode={activeSpotifyMode}
-                      songIndex={songIndex}
-                      speed={animSpeed}
-                    />
-                  </div>
-
-                  {/* Spotify Track Picker */}
-                  <div className="space-y-4 pt-4">
-                    <h3 className="font-black text-base uppercase tracking-wider text-black dark:text-white flex items-center gap-2">
-                      <Music className="size-5" />
-                      Select Demo Track
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {DEMO_SONGS.map((song, idx) => {
-                        const isSelected = songIndex === idx
-                        return (
-                          <button
-                            key={idx}
-                            onClick={() => setSongIndex(idx)}
-                            className={`w-full flex items-center justify-between p-4 border-[3px] border-black text-left font-mono font-bold transition-all ${
-                              isSelected
-                                ? "bg-[#60a5fa] text-black translate-x-[2px] translate-y-[2px] shadow-none"
-                                : "bg-white text-black hover:bg-[#f4f4f0] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:bg-zinc-800 dark:text-white"
-                            }`}
-                          >
-                            <div className="flex items-center gap-4">
-                              <span className="text-sm opacity-50">0{idx + 1}</span>
-                              <div>
-                                <span className="block text-base uppercase font-black">{song.title}</span>
-                                <span className="block text-xs opacity-60">{song.artist}</span>
-                              </div>
-                            </div>
-                            <span className="text-sm opacity-75">
-                              {Math.floor(song.duration / 60)}:{(song.duration % 60).toString().padStart(2, "0")}
-                            </span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Spotify Screen Mode Controllers */}
-                  <div className="space-y-4 pt-6 border-t-[3px] border-black/10">
-                    <h3 className="font-black text-sm uppercase tracking-wider text-black dark:text-white">
-                      Spotify Screen Mode Triggers
-                    </h3>
-                    <div className="flex flex-wrap gap-3">
-                      {(["playing", "paused", "noSong", "changing", "intro"] as const).map((mode) => {
-                        const isSelected = activeSpotifyMode === mode
-                        return (
-                          <Button
-                            key={mode}
-                            variant={isSelected ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setActiveSpotifyMode(mode)}
-                            className={`font-black text-sm px-4 h-10 border-[3px] border-black uppercase ${
-                              isSelected ? "bg-[#60a5fa] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" : "shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-zinc-100"
-                            }`}
-                          >
-                            {mode === "noSong" ? "No Song" : mode}
-                          </Button>
-                        )
-                      })}
-                    </div>
-                  </div>
+                  <RadioPlayer ref={radioRef} />
                 </div>
 
                 <div className="border-t-[3px] border-black/10 pt-4 mt-8">
                   <div className="flex items-center gap-3">
                     <ShieldAlert className="size-4 text-black dark:text-white" />
                     <span className="font-bold text-xs uppercase text-zinc-500 dark:text-zinc-400">
-                      Simulated local client mode only. Requires ESP32 for hardware projection.
+                      Free internet radio via SomaFM. Miaw can play, pause, and switch stations.
                     </span>
                   </div>
                 </div>
