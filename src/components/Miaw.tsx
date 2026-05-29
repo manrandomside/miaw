@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState } from "react"
 import { Music } from "lucide-react"
 
 const SW_OUTLINE = 2.5
@@ -544,6 +544,24 @@ function Tail({ pose, t, animSpeed }: TailProps) {
   return null
 }
 
+interface SparkProps {
+  cx: number
+  cy: number
+  s?: number
+  ph?: number
+  t: number
+  speed: number
+}
+
+function Spark({ cx, cy, s = 1, ph = 0, t, speed }: SparkProps) {
+  const sc = 0.6 + ((Math.sin(t * 3 * speed + ph) + 1) / 2) * 0.6
+  return (
+    <g transform={`translate(${cx} ${cy}) scale(${s * sc})`} fill="currentColor">
+      <path d="M 0 -3 L 0.7 -0.7 L 3 0 L 0.7 0.7 L 0 3 L -0.7 0.7 L -3 0 L -0.7 -0.7 Z" />
+    </g>
+  )
+}
+
 interface StateExtrasProps {
   state: string | null
   t: number
@@ -586,21 +604,13 @@ function StateExtras({ state, t, animSpeed }: StateExtrasProps) {
     )
   }
   if (state === "happy") {
-    const Spark = ({ cx, cy, s = 1, ph = 0 }: { cx: number; cy: number; s?: number; ph?: number }) => {
-      const sc = 0.6 + ((Math.sin(t * 3 * speed + ph) + 1) / 2) * 0.6
-      return (
-        <g transform={`translate(${cx} ${cy}) scale(${s * sc})`} fill="currentColor">
-          <path d="M 0 -3 L 0.7 -0.7 L 3 0 L 0.7 0.7 L 0 3 L -0.7 0.7 L -3 0 L -0.7 -0.7 Z" />
-        </g>
-      )
-    }
     return (
       <g>
-        <Spark cx={30} cy={14} ph={0} />
-        <Spark cx={100} cy={14} ph={1.5} />
-        <Spark cx={24} cy={34} s={0.7} ph={2.8} />
-        <Spark cx={106} cy={34} s={0.7} ph={1.0} />
-        <Spark cx={64} cy={6} s={0.8} ph={0.5} />
+        <Spark cx={30} cy={14} ph={0} t={t} speed={speed} />
+        <Spark cx={100} cy={14} ph={1.5} t={t} speed={speed} />
+        <Spark cx={24} cy={34} s={0.7} ph={2.8} t={t} speed={speed} />
+        <Spark cx={106} cy={34} s={0.7} ph={1.0} t={t} speed={speed} />
+        <Spark cx={64} cy={6} s={0.8} ph={0.5} t={t} speed={speed} />
       </g>
     )
   }
