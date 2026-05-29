@@ -12,8 +12,10 @@ import { supabase } from "@/lib/supabaseClient"
 import { isLocalMode } from "@/lib/connectionMode"
 import { LoginScreen } from "@/components/LoginScreen"
 import { LobbyScreen } from "@/components/LobbyScreen"
+import { GamingOverlay } from "@/components/GamingOverlay"
 import { AUTH_STORAGE_KEY } from "@/lib/auth"
 import Webcam from "react-webcam"
+import { AnimatePresence } from "framer-motion"
 import {
   Camera,
   Settings,
@@ -198,6 +200,7 @@ export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Ref agar voice handler SELALU menggunakan versi terbaru handleSendMessage
+  const isGamingMode = activeMiawState === "gaming" || telemetry?.state === "gaming";
   const handleSendMessageRef = useRef<(msg?: string) => void>(() => {})
 
   // Advanced State Machine Refs
@@ -736,27 +739,13 @@ export default function Home() {
   }
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans selection:bg-black selection:text-white transition-colors duration-500 ${bgColors[activeMiawState]} dark:bg-zinc-950 relative`}>
-      {/* Gaming Overlay */}
-      {activeMiawState === "gaming" && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
-          <div className="border-[4px] border-[#ffde43] bg-black p-8 text-center shadow-[0_0_20px_rgba(255,222,67,0.5)] max-w-lg w-full animate-pulse">
-            <h1 className="text-4xl font-black uppercase text-[#ffde43] tracking-widest mb-4">
-              🕹️ SYSTEM LOCKED
-            </h1>
-            <p className="text-white font-mono text-lg mb-6">
-              Miaw is currently playing "Dream Dash" on the physical console.
-            </p>
-            <div className="flex justify-center space-x-4">
-              <div className="w-12 h-12 rounded-full border-4 border-yellow-400 bg-yellow-500/20" />
-              <div className="w-12 h-12 rounded-full border-4 border-white bg-white/20" />
-            </div>
-            <p className="text-zinc-500 text-xs font-bold uppercase mt-8 tracking-widest">
-              Please wait until Game Mode is disabled...
-            </p>
-          </div>
-        </div>
-      )}
+    <>
+      {/* Premium Gaming Overlay */}
+      <AnimatePresence>
+        {isGamingMode && <GamingOverlay />}
+      </AnimatePresence>
+
+      <div className={`min-h-screen flex flex-col font-sans selection:bg-black selection:text-white transition-colors duration-500 ${bgColors[activeMiawState]} dark:bg-zinc-950 relative`}>
 
       {/* Navigation */}
       <header className={`border-b-[4px] border-black bg-white dark:bg-zinc-900 sticky top-0 z-50 ${activeMiawState === 'gaming' ? 'pointer-events-none opacity-50' : ''}`}>
@@ -1269,5 +1258,6 @@ export default function Home() {
         </div>
       )}
     </div>
+    </>
   )
 }

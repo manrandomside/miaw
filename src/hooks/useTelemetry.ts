@@ -16,6 +16,7 @@ export interface TelemetryData {
     lamp2: boolean
     lamp3: boolean
   }
+  state?: string
 }
 
 interface TelemetryRow {
@@ -26,6 +27,7 @@ interface TelemetryRow {
   lamp2: boolean
   lamp3: boolean
   updated_at?: string
+  state?: string
 }
 
 export function useTelemetry() {
@@ -89,7 +91,8 @@ export function useTelemetry() {
         lamp1: row.lamp1,
         lamp2: row.lamp2,
         lamp3: row.lamp3,
-      }
+      },
+      state: row.state
     })
 
     // Hitung ulang status online berdasarkan kebaruan updated_at.
