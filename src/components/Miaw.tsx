@@ -183,6 +183,23 @@ export const STATES: Record<string, StateConfig> = {
     breathe: false,
     dance: true,
   },
+  gaming: {
+    label: "Gaming",
+    short: "Gaming",
+    desc: "Miaw is focused on playing a retro console game.",
+    trigger: "When the blue hardware button is pressed.",
+    anim: "Intense focus, rapid eye movement",
+    eyes: "wide",
+    mouth: "omega",
+    paws: "bothUp",
+    nose: "tri",
+    tilt: 5,
+    extras: null,
+    blush: null,
+    tail: "alert",
+    breathe: false,
+    bounce: true,
+  },
 }
 
 function HeadAndEars() {

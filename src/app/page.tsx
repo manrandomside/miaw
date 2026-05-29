@@ -720,7 +720,9 @@ export default function Home() {
     happy: "bg-green-100",
     confused: "bg-red-200",
     sleeping: "bg-[#bfdbfe]",
-    grooming: "bg-purple-100"
+    grooming: "bg-purple-100",
+    dancing: "bg-[#f4f4f0]",
+    gaming: "bg-black"
   }
 
   if (!authChecked) return null
@@ -734,9 +736,30 @@ export default function Home() {
   }
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans selection:bg-black selection:text-white transition-colors duration-500 ${bgColors[activeMiawState]} dark:bg-zinc-950`}>
+    <div className={`min-h-screen flex flex-col font-sans selection:bg-black selection:text-white transition-colors duration-500 ${bgColors[activeMiawState]} dark:bg-zinc-950 relative`}>
+      {/* Gaming Overlay */}
+      {activeMiawState === "gaming" && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+          <div className="border-[4px] border-[#ffde43] bg-black p-8 text-center shadow-[0_0_20px_rgba(255,222,67,0.5)] max-w-lg w-full animate-pulse">
+            <h1 className="text-4xl font-black uppercase text-[#ffde43] tracking-widest mb-4">
+              🕹️ SYSTEM LOCKED
+            </h1>
+            <p className="text-white font-mono text-lg mb-6">
+              Miaw is currently playing "Dream Dash" on the physical console.
+            </p>
+            <div className="flex justify-center space-x-4">
+              <div className="w-12 h-12 rounded-full border-4 border-yellow-400 bg-yellow-500/20" />
+              <div className="w-12 h-12 rounded-full border-4 border-white bg-white/20" />
+            </div>
+            <p className="text-zinc-500 text-xs font-bold uppercase mt-8 tracking-widest">
+              Please wait until Game Mode is disabled...
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Navigation */}
-      <header className="border-b-[4px] border-black bg-white dark:bg-zinc-900 sticky top-0 z-50">
+      <header className={`border-b-[4px] border-black bg-white dark:bg-zinc-900 sticky top-0 z-50 ${activeMiawState === 'gaming' ? 'pointer-events-none opacity-50' : ''}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <div className="bg-black border-[3px] border-black p-0.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] w-10 h-10 flex items-center justify-center overflow-hidden">
@@ -784,7 +807,7 @@ export default function Home() {
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
+      <main className={`flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10 ${activeMiawState === 'gaming' ? 'pointer-events-none opacity-20 blur-sm' : ''}`}>
         
         {activeView === "dashboard" && (
           <div className="space-y-10">
