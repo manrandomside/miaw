@@ -10,10 +10,11 @@ import { useScheduler } from "@/hooks/useScheduler"
 import { useSFX } from "@/hooks/useSFX"
 import { supabase } from "@/lib/supabaseClient"
 import { isLocalMode } from "@/lib/connectionMode"
+import { LoginScreen } from "@/components/LoginScreen"
+import { AUTH_STORAGE_KEY } from "@/lib/auth"
 import Webcam from "react-webcam"
 import {
   Camera,
-  Cpu,
   Settings,
   Thermometer,
   Sun,
@@ -31,6 +32,7 @@ import {
   MicOff,
   Volume2,
   VolumeX,
+  LogOut,
 } from "lucide-react"
 
 // All ESP32 communication now goes through server-side proxies:
@@ -44,6 +46,24 @@ interface ChatMessage {
 }
 
 export default function Home() {
+  const [isAuthed, setIsAuthed] = useState(false)
+  const [authChecked, setAuthChecked] = useState(false)
+
+  useEffect(() => {
+    setIsAuthed(localStorage.getItem(AUTH_STORAGE_KEY) === "true")
+    setAuthChecked(true)
+  }, [])
+
+  const handleLoginSuccess = useCallback(() => {
+    localStorage.setItem(AUTH_STORAGE_KEY, "true")
+    setIsAuthed(true)
+  }, [])
+
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem(AUTH_STORAGE_KEY)
+    setIsAuthed(false)
+  }, [])
+
   const { playClick, playPop } = useSFX()
   const { data: telemetry, isError: telemetryError, isOffline: telemetryOffline } = useTelemetry()
   const [activeView, setActiveView] = useState<"dashboard" | "lyrics">("dashboard")
@@ -80,7 +100,7 @@ export default function Home() {
   // Speech Recognition (STT) State
   const [isListening, setIsListening] = useState(false)
   const [sttSupported, setSttSupported] = useState(true)
-  const recognitionRef = useRef<any>(null)
+  const recognitionRef = useRef<SpeechRecognition | null>(null)
   const [isContinuousMic, setIsContinuousMic] = useState(false)
   const isContinuousMicRef = useRef(false)
 
@@ -130,7 +150,7 @@ export default function Home() {
         .limit(50)
       
       if (!error && data) {
-        setChatLog(data.map((row: any) => ({
+        setChatLog(data.map((row: { role: string; text: string; expression?: string; actionFired?: string | null }) => ({
           role: row.role as "user" | "miaw",
           text: row.text,
           expression: row.expression,
@@ -143,11 +163,11 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition
-      if (!SpeechRecognition) {
+      const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition
+      if (!SpeechRecognitionImpl) {
         setSttSupported(false)
       } else {
-        recognitionRef.current = new SpeechRecognition()
+        recognitionRef.current = new SpeechRecognitionImpl()
         recognitionRef.current.lang = "id-ID"
         recognitionRef.current.interimResults = false
         // continuous = true: mic stays alive and fires onresult for each phrase
@@ -157,22 +177,22 @@ export default function Home() {
           setIsListening(true)
         }
 
-        recognitionRef.current.onresult = (event: any) => {
+        recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
           // Get the latest result
           const lastResult = event.results[event.results.length - 1]
           if (!lastResult.isFinal) return
           const rawTranscript = lastResult[0].transcript.trim()
           if (!rawTranscript) return
-          
+
           // Immediately stop mic to prevent feedback loop (mic picking up TTS)
           isSpeakingRef.current = true
-          try { recognitionRef.current.stop() } catch (e) {}
+          try { recognitionRef.current?.stop() } catch {}
           
           setChatInput(rawTranscript)
           handleSendMessageRef.current(rawTranscript)
         }
 
-        recognitionRef.current.onerror = (event: any) => {
+        recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
           // no-speech and aborted are expected during TTS or silence
           if (event.error !== 'no-speech' && event.error !== 'aborted') {
             console.warn("Speech API Error:", event.error)
@@ -185,7 +205,7 @@ export default function Home() {
           if (isContinuousMicRef.current && !isSpeakingRef.current) {
             setTimeout(() => {
               if (isContinuousMicRef.current && !isSpeakingRef.current && recognitionRef.current) {
-                try { recognitionRef.current.start() } catch (e) {}
+                try { recognitionRef.current.start() } catch {}
               }
             }, 500)
           }
@@ -209,7 +229,6 @@ export default function Home() {
         return () => synth.removeEventListener("voiceschanged", loadVoices)
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const resetInactivityTimers = useCallback(() => {
@@ -296,7 +315,7 @@ export default function Home() {
         if (isContinuousMicRef.current && !isSpeakingRef.current && recognitionRef.current) {
           try {
             recognitionRef.current.start()
-          } catch (e) {
+          } catch {
             // Already running, ignore
           }
         }
@@ -310,7 +329,7 @@ export default function Home() {
     // Mark as speaking and stop mic to avoid collision
     isSpeakingRef.current = true
     if (recognitionRef.current && isContinuousMicRef.current) {
-      try { recognitionRef.current.stop() } catch (e) {}
+      try { recognitionRef.current.stop() } catch {}
     }
 
     if (isMuted || !ttsSupported || typeof window === "undefined") {
@@ -525,7 +544,7 @@ export default function Home() {
         setIsContinuousMic(false)
         isContinuousMicRef.current = false
         isSpeakingRef.current = false
-        try { recognitionRef.current.stop() } catch (e) {}
+        try { recognitionRef.current?.stop() } catch {}
         setActiveMiawState("idleCalm")
         setIsListening(false)
       } else {
@@ -533,7 +552,7 @@ export default function Home() {
         setIsContinuousMic(true)
         isContinuousMicRef.current = true
         isSpeakingRef.current = false
-        try { recognitionRef.current.start() } catch (e) {}
+        try { recognitionRef.current?.start() } catch {}
       }
       resetInactivityTimers()
     } catch (err) {
@@ -550,6 +569,12 @@ export default function Home() {
     confused: "bg-red-200",
     sleeping: "bg-[#bfdbfe]",
     grooming: "bg-purple-100"
+  }
+
+  if (!authChecked) return null
+
+  if (!isAuthed) {
+    return <LoginScreen onSuccess={handleLoginSuccess} />
   }
 
   return (
@@ -594,6 +619,9 @@ export default function Home() {
             </Button>
             <Button variant="outline" size="icon" onClick={() => { playClick(); setShowSettings(true) }} className="border-[3px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-zinc-100 dark:hover:bg-zinc-800">
               <Settings className="size-4" />
+            </Button>
+            <Button variant="outline" size="icon" onClick={() => { playClick(); handleLogout() }} title="Logout" className="border-[3px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-red-400 hover:text-white dark:hover:bg-red-500">
+              <LogOut className="size-4" />
             </Button>
           </div>
         </div>
