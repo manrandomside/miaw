@@ -2,6 +2,11 @@ import { useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { isLocalMode } from "@/lib/connectionMode"
 
+// Ambang batas kebaruan data: perangkat dianggap offline bila baris telemetri
+// terakhir di-update lebih dari 30 detik lalu (ESP32 update tiap ~10 detik).
+const AMBANG = 30000
+const TICK = 5000
+
 export interface TelemetryData {
   temperature: number
   humidity: number
@@ -20,13 +25,17 @@ interface TelemetryRow {
   lamp1: boolean
   lamp2: boolean
   lamp3: boolean
+  updated_at?: string
 }
 
 export function useTelemetry() {
   const [data, setData] = useState<TelemetryData | null>(null)
   const [isError, setIsError] = useState(false)
   const [isOffline, setIsOffline] = useState(false)
+  const [isOnline, setIsOnline] = useState(false)
+  const [lastSeen, setLastSeen] = useState<number | null>(null)
   const consecutiveErrorsRef = useRef(0)
+  const lastSeenRef = useRef<number | null>(null)
 
   useEffect(() => {
     const local = isLocalMode()
@@ -50,10 +59,16 @@ export function useTelemetry() {
           setData(json)
           setIsError(false)
           setIsOffline(false)
+          // Online diturunkan dari hasil fetch yang sukses (deteksi offline existing)
+          setIsOnline(true)
+          const now = Date.now()
+          lastSeenRef.current = now
+          setLastSeen(now)
           consecutiveErrorsRef.current = 0
         } catch {
           consecutiveErrorsRef.current += 1
           setIsError(true)
+          setIsOnline(false)
           if (consecutiveErrorsRef.current >= 3) setData(null)
         }
       }
@@ -77,6 +92,24 @@ export function useTelemetry() {
       }
     })
 
+    // Hitung ulang status online berdasarkan kebaruan updated_at.
+    // Dipanggil saat data baru masuk maupun lewat tick periodik supaya bisa
+    // berubah jadi offline walau tidak ada data baru.
+    const evaluateOnline = () => {
+      const seen = lastSeenRef.current
+      setIsOnline(seen !== null && Date.now() - seen < AMBANG)
+    }
+
+    const trackUpdatedAt = (row: TelemetryRow) => {
+      if (row.updated_at) {
+        const ts = new Date(row.updated_at).getTime()
+        if (!isNaN(ts)) {
+          lastSeenRef.current = ts
+          setLastSeen(ts)
+        }
+      }
+    }
+
     const fetchCloud = async () => {
       try {
         const { data: row, error } = await supabase
@@ -89,11 +122,14 @@ export function useTelemetry() {
           setData(mapRow(row))
           setIsError(false)
           setIsOffline(false)
+          trackUpdatedAt(row)
+          evaluateOnline()
         }
       } catch (err) {
         console.error("[useTelemetry] Cloud fetch failed:", err)
         setIsError(true)
         setIsOffline(true)
+        setIsOnline(false)
       }
     }
 
@@ -111,21 +147,27 @@ export function useTelemetry() {
           filter: 'id=eq.1'
         },
         (payload) => {
-          setData(mapRow(payload.new as TelemetryRow))
+          const row = payload.new as TelemetryRow
+          setData(mapRow(row))
           setIsError(false)
           setIsOffline(false)
+          trackUpdatedAt(row)
+          evaluateOnline()
         }
       )
       .subscribe()
 
     // Fallback polling setiap 3 detik
     const interval = setInterval(fetchCloud, 3000)
+    // Tick liveness: re-evaluasi online walau tak ada data baru masuk
+    const livenessTick = setInterval(evaluateOnline, TICK)
 
     return () => {
       supabase.removeChannel(channel)
       clearInterval(interval)
+      clearInterval(livenessTick)
     }
   }, [])
 
-  return { data, isError, isOffline }
+  return { data, isError, isOffline, isOnline, lastSeen }
 }

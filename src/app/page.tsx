@@ -65,7 +65,7 @@ export default function Home() {
   }, [])
 
   const { playClick, playPop } = useSFX()
-  const { data: telemetry, isError: telemetryError, isOffline: telemetryOffline } = useTelemetry()
+  const { data: telemetry, isError: telemetryError, isOnline: deviceOnline, lastSeen: deviceLastSeen } = useTelemetry()
   const [activeView, setActiveView] = useState<"dashboard" | "lyrics">("dashboard")
   
   const [activeMiawState, setActiveMiawState] = useState<keyof typeof STATES>("idleCalm")
@@ -446,11 +446,13 @@ export default function Home() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           message,
           telemetry,
           localTime: new Date().toLocaleTimeString("id-ID"),
           imageBase64,
+          isOnline: deviceOnline,
+          lastSeen: deviceLastSeen,
           history: recentHistory
         }),
       })
@@ -492,8 +494,12 @@ export default function Home() {
         if (data.media === "next") setSongIndex((prev) => (prev + 1) % DEMO_SONGS.length)
         if (data.media === "prev") setSongIndex((prev) => (prev - 1 < 0 ? DEMO_SONGS.length - 1 : prev - 1))
       } else if (data.action?.endpoint) {
-        actionFired = `${data.action.method} ${data.action.endpoint}`
-        dispatchESP32Action(data.action.endpoint, data.action.method)
+        // Guard defensif: jangan kirim aksi hardware saat perangkat offline.
+        // Biarkan balasan jujur Miaw soal offline yang tampil, tanpa fake action.
+        if (deviceOnline) {
+          actionFired = `${data.action.method} ${data.action.endpoint}`
+          dispatchESP32Action(data.action.endpoint, data.action.method)
+        }
       }
 
       setChatLog((prev) => [
@@ -528,7 +534,7 @@ export default function Home() {
       setIsLoading(false)
       inputRef.current?.focus()
     }
-  }, [chatInput, isLoading, dispatchESP32Action, speakReply, telemetry])
+  }, [chatInput, isLoading, dispatchESP32Action, speakReply, telemetry, deviceOnline, deviceLastSeen])
 
   // Selalu update ref ke versi terbaru handleSendMessage
   useEffect(() => {
@@ -885,26 +891,37 @@ export default function Home() {
             {/* Dashboard Grid (ESP32 Live Telemetry) */}
             {showDashboard && (
             <section className="space-y-6">
-              <h2 className="text-2xl font-black uppercase tracking-wider border-b-[4px] border-black pb-2 text-black dark:text-white text-center sm:text-left">
-                ESP32 Dashboard Telemetry
-              </h2>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b-[4px] border-black pb-2">
+                <h2 className="text-2xl font-black uppercase tracking-wider text-black dark:text-white text-center sm:text-left">
+                  ESP32 Dashboard Telemetry
+                </h2>
+                <span className={`flex items-center gap-2 self-center sm:self-auto border-[3px] border-black px-3 py-1 text-xs font-black uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${deviceOnline ? "bg-[#4ade80] text-black" : "bg-red-500 text-white"}`}>
+                  <span className={`inline-block size-2 rounded-full ${deviceOnline ? "bg-black animate-pulse" : "bg-white"}`} />
+                  {deviceOnline ? "Device Online" : "Device Offline"}
+                </span>
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {/* ESP32 Offline Banner */}
-                {telemetryOffline && (
+                {/* Device Offline Banner */}
+                {!deviceOnline && (
                   <div className="md:col-span-3 border-[3px] border-black bg-[#fbbf24] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center gap-3">
                     <ShieldAlert className="size-5 text-black shrink-0" />
                     <span className="font-bold text-sm text-black">
-                      ESP32 tidak terjangkau. Pastikan ESP32 menyala dan terhubung ke jaringan WiFi yang sama dengan server.
+                      Perangkat ESP32 sedang offline. Nilai sensor di bawah adalah pembacaan terakhir dan mungkin sudah basi.
                     </span>
                   </div>
                 )}
 
                 {/* Climate Card */}
-                <div className="border-[4px] border-black bg-[#a78bfa] p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] dark:bg-purple-900 dark:text-white flex flex-col justify-between">
+                <div className={`border-[4px] border-black bg-[#a78bfa] p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] dark:bg-purple-900 dark:text-white flex flex-col justify-between transition-opacity ${!deviceOnline ? "opacity-60" : ""}`}>
                   <div>
                     <div className="flex items-center justify-between border-b-[3px] border-black pb-3 mb-4">
-                      <h3 className="font-black uppercase text-lg tracking-tight">DHT11 Climate</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-black uppercase text-lg tracking-tight">DHT11 Climate</h3>
+                        {!deviceOnline && (
+                          <span className="border-[2px] border-black bg-red-400 text-black text-[9px] font-black uppercase px-1.5 py-0.5">Basi</span>
+                        )}
+                      </div>
                       <Thermometer className="size-6 text-black dark:text-white" />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
@@ -912,7 +929,7 @@ export default function Home() {
                         <div className="text-xs font-black uppercase text-zinc-500 dark:text-zinc-400">Temp</div>
                         <div className={`text-2xl sm:text-3xl font-black ${telemetryError || !telemetry ? "text-red-500" : "text-black dark:text-white"}`}>
                           {telemetryError || !telemetry
-                            ? (telemetryOffline ? "OFFLINE" : "ERR")
+                            ? (!deviceOnline ? "OFFLINE" : "ERR")
                             : `${telemetry.temperature.toFixed(1)} \u00b0C`}
                         </div>
                       </div>
@@ -920,7 +937,7 @@ export default function Home() {
                         <div className="text-xs font-black uppercase text-zinc-500 dark:text-zinc-400">Humidity</div>
                         <div className={`text-2xl sm:text-3xl font-black ${telemetryError || !telemetry ? "text-red-500" : "text-black dark:text-white"}`}>
                           {telemetryError || !telemetry
-                            ? (telemetryOffline ? "OFFLINE" : "---")
+                            ? (!deviceOnline ? "OFFLINE" : "---")
                             : `${telemetry.humidity.toFixed(1)} %`}
                         </div>
                       </div>
@@ -929,10 +946,15 @@ export default function Home() {
                 </div>
 
                 {/* Light Sensor Card */}
-                <div className="border-[4px] border-black bg-[#4ade80] p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] dark:bg-green-900 dark:text-white flex flex-col justify-between">
+                <div className={`border-[4px] border-black bg-[#4ade80] p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] dark:bg-green-900 dark:text-white flex flex-col justify-between transition-opacity ${!deviceOnline ? "opacity-60" : ""}`}>
                   <div>
                     <div className="flex items-center justify-between border-b-[3px] border-black pb-3 mb-4">
-                      <h3 className="font-black uppercase text-lg tracking-tight">LDR Ambient</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-black uppercase text-lg tracking-tight">LDR Ambient</h3>
+                        {!deviceOnline && (
+                          <span className="border-[2px] border-black bg-red-400 text-black text-[9px] font-black uppercase px-1.5 py-0.5">Basi</span>
+                        )}
+                      </div>
                       <Sun className="size-6 text-black dark:text-white" />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
@@ -940,7 +962,7 @@ export default function Home() {
                         <div className="text-xs font-black uppercase text-zinc-500 dark:text-zinc-400">Intensity</div>
                         <div className={`text-2xl sm:text-3xl font-black ${telemetryError || !telemetry ? "text-red-500" : "text-black dark:text-white"}`}>
                           {telemetryError || !telemetry
-                            ? (telemetryOffline ? "OFFLINE" : "ERR")
+                            ? (!deviceOnline ? "OFFLINE" : "ERR")
                             : `${telemetry.ldr} lx`}
                         </div>
                       </div>
@@ -948,7 +970,7 @@ export default function Home() {
                         <div className="text-xs font-black uppercase text-zinc-500 dark:text-zinc-400">Auto Mode</div>
                         <div className={`text-lg sm:text-xl font-black uppercase pt-1 ${telemetryError || !telemetry ? "text-red-500" : "text-green-600 dark:text-green-400"}`}>
                           {telemetryError || !telemetry
-                            ? (telemetryOffline ? "OFFLINE" : "ERR")
+                            ? (!deviceOnline ? "OFFLINE" : "ERR")
                             : "Active"}
                         </div>
                       </div>
@@ -957,9 +979,14 @@ export default function Home() {
                 </div>
 
                 {/* Actuators Card */}
-                <div className="border-[4px] border-black bg-[#f472b6] p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] dark:bg-pink-900 dark:text-white">
+                <div className={`border-[4px] border-black bg-[#f472b6] p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] dark:bg-pink-900 dark:text-white transition-opacity ${!deviceOnline ? "opacity-60" : ""}`}>
                   <div className="flex items-center justify-between border-b-[3px] border-black pb-3 mb-4">
-                    <h3 className="font-black uppercase text-lg tracking-tight">Smart Lamps</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-black uppercase text-lg tracking-tight">Smart Lamps</h3>
+                      {!deviceOnline && (
+                        <span className="border-[2px] border-black bg-red-400 text-black text-[9px] font-black uppercase px-1.5 py-0.5">Basi</span>
+                      )}
+                    </div>
                     <Lightbulb className="size-6 text-black dark:text-white" />
                   </div>
                   <div className="space-y-3 font-bold text-sm">

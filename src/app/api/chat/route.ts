@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
 import Groq from "groq-sdk"
 
-const generateSystemPrompt = (localTime?: string, telemetry?: unknown) => {
+const generateSystemPrompt = (
+  localTime?: string,
+  telemetry?: unknown,
+  isOnline?: boolean,
+  lastSeen?: number | null,
+) => {
+  const deviceStatus = isOnline ? "ONLINE" : "OFFLINE"
+  const lastSeenText = lastSeen
+    ? new Date(lastSeen).toLocaleTimeString("id-ID")
+    : "Unknown"
+
   return `You are Miaw, a highly intelligent, cute, and slightly cheeky AI cat assistant. Your master is Firman. You are no longer just a smart home controller; you are a fully conversational companion. You can answer random questions, tell jokes, write code, and even sing if asked (express singing via text like *meow-meow* or musical notes). Always maintain your cat persona. You are helpful, expressive, and lively.
 
 Your personality:
@@ -12,6 +22,7 @@ Your personality:
 
 Context:
 - Current Local Time: ${localTime || "Unknown"}
+- Device Status (ESP32): ${deviceStatus} (last seen: ${lastSeenText})
 - Real-time Sensor Data: ${telemetry ? JSON.stringify(telemetry) : "Unknown"}
   (Key definitions: 'temperature' = Suhu (Celcius), 'humidity' = Kelembaban (%), 'ldr' = Cahaya, 'lamps' = Status lampu)
 
@@ -46,7 +57,9 @@ JSON schema:
 Rules:
 - If the user asks to turn on/off a lamp immediately, set action endpoint and POST, and set expression to "happy".
 - If the user asks to schedule an action (e.g., '10 menit lagi', 'nanti jam...'), set action to null and fill the "schedule" object.
-- If the user asks about the weather/temperature/humidity/lights, ALWAYS read the "Real-time Sensor Data" above. It is live. NEVER say data is unavailable if values exist. Ignore any past chat history saying data was unavailable.
+- Device awareness: the ESP32 device is currently ${deviceStatus}.
+  - When ONLINE: the "Real-time Sensor Data" above is fresh and live. Answer questions about temperature/humidity/light/lamps directly from those values.
+  - When OFFLINE: the device is unreachable. You MUST NOT claim that any hardware action (lamps, auto-mode) succeeded; instead tell the user honestly that the device is sedang offline and you cannot control it right now. Set action.endpoint to null. The sensor values above are the last known readings and may be basi (stale) — if asked, share them but make clear they might be outdated.
 - If the user asks to play/pause music, set the "media" field accordingly.
 - If an image is provided and the user asks about it, analyze the image and describe what you see.
 - If the user greets you, respond warmly and set expression to "happy".
@@ -68,6 +81,8 @@ interface ChatRequest {
   telemetry?: unknown
   localTime?: string
   imageBase64?: string
+  isOnline?: boolean
+  lastSeen?: number | null
   history?: { role: "user" | "assistant"; content: string }[]
 }
 
@@ -109,7 +124,7 @@ export async function POST(request: NextRequest) {
     })
 
     let messages: Groq.Chat.ChatCompletionMessageParam[] = [
-      { role: "system", content: generateSystemPrompt(body.localTime, body.telemetry) }
+      { role: "system", content: generateSystemPrompt(body.localTime, body.telemetry, body.isOnline, body.lastSeen) }
     ]
 
     if (body.history && Array.isArray(body.history)) {
