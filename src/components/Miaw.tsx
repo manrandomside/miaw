@@ -22,14 +22,15 @@ export interface StateConfig {
   paws: "cheekRight" | "chinRest" | "bothUp" | "cupEarRight" | "gestureLowerRight" | "scratchTopRight" | "curledChest" | "earGroomEaster" | null
   nose: "tri" | "none"
   tilt: number
-  extras: "listening" | "thinking" | "speaking" | "happy" | "confused" | "sleeping" | "grooming" | null
+  extras: "listening" | "thinking" | "speaking" | "happy" | "confused" | "sleeping" | "grooming" | "dancing" | null
   blush: number | null
-  tail: "sway" | "alert" | "up" | "curled" | null
+  tail: "sway" | "alert" | "up" | "curled" | "dance" | null
   breathe: boolean
   breatheSlow?: boolean
   microTilt?: boolean
   bounce?: boolean
   wobble?: boolean
+  dance?: boolean
 }
 
 export const STATES: Record<string, StateConfig> = {
@@ -164,6 +165,23 @@ export const STATES: Record<string, StateConfig> = {
     tail: "curled",
     breathe: true,
     breatheSlow: true,
+  },
+  dancing: {
+    label: "Dancing",
+    short: "Dancing",
+    desc: "Grooving to the music with little hops and floating notes.",
+    trigger: "When the radio is playing (client-driven).",
+    anim: "Side-step walk, hops, body bounce, tail wag, rising notes",
+    eyes: "happy",
+    mouth: "smileBig",
+    paws: "bothUp",
+    nose: "tri",
+    tilt: 0,
+    extras: "dancing",
+    blush: 2.0,
+    tail: "dance",
+    breathe: false,
+    dance: true,
   },
 }
 
@@ -541,6 +559,15 @@ function Tail({ pose, t, animSpeed }: TailProps) {
       </g>
     )
   }
+  if (pose === "dance") {
+    const a = Math.sin(phase * 3 * 2 * Math.PI) * 16 + Math.sin(phase * 11) * 3
+    return (
+      <g transform={`rotate(${a} 8 62)`}>
+        <path d="M 8 62 Q 13 55 17 50 Q 21 45 27 43" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="27" cy="43" r="1.4" fill="currentColor" />
+      </g>
+    )
+  }
   return null
 }
 
@@ -644,6 +671,31 @@ function StateExtras({ state, t, animSpeed }: StateExtrasProps) {
       </g>
     )
   }
+  if (state === "dancing") {
+    const notes = [
+      { x: 26, baseY: 32, ph: 0.0, s: 1.0, dur: 2.6 },
+      { x: 102, baseY: 30, ph: 0.9, s: 0.85, dur: 2.2 },
+      { x: 20, baseY: 42, ph: 1.7, s: 0.7, dur: 3.1 },
+      { x: 108, baseY: 44, ph: 0.4, s: 0.75, dur: 2.4 },
+    ]
+    return (
+      <g fill="currentColor">
+        {notes.map((n, i) => {
+          const p = ((t * speed) / n.dur + n.ph) % 1
+          const x = n.x + Math.sin(p * 6 + i) * 3
+          const y = n.baseY - p * 26
+          const op = p < 0.15 ? p / 0.15 : p > 0.85 ? (1 - p) / 0.15 : 1
+          return (
+            <g key={i} transform={`translate(${x.toFixed(2)} ${y.toFixed(2)}) scale(${n.s})`} opacity={op}>
+              <ellipse cx="-1.6" cy="2.4" rx="1.7" ry="1.3" transform="rotate(-20 -1.6 2.4)" />
+              <rect x="-0.1" y="-3.4" width="0.9" height="5.8" />
+              <path d="M 0.8 -3.4 Q 3.6 -2.6 2.4 0.2 Q 2.7 -1.8 0.8 -1.8 Z" />
+            </g>
+          )
+        })}
+      </g>
+    )
+  }
   return null
 }
 
@@ -728,14 +780,31 @@ export function Miaw({ state = "idleCalm", animSpeed = 1, animate = true }: Miaw
 
   let bodyTransform = ""
   if (animate) {
-    const breatheRate = cfg.breatheSlow ? 0.4 : 0.7
-    const breathe = cfg.breathe ? 1 + Math.sin(t * breatheRate * animSpeed * Math.PI) * 0.012 : 1
-    const bounce = cfg.bounce ? Math.sin(t * 3 * animSpeed) * 0.6 : 0
-    const wobble = cfg.wobble ? Math.sin(t * 2 * animSpeed) * 3 : 0
-    bodyTransform = `translate(64 ${32 + bounce}) scale(${breathe}) rotate(${wobble}) translate(-64 -32)`
+    if (cfg.dance) {
+      // Gerak menari: kombinasi sin beda fase + tempo yang sedikit berubah
+      // supaya terasa lincah, bukan loop datar.
+      const beat = t * animSpeed
+      const tempo = 2.4 + Math.sin(beat * 0.27) * 0.3
+      const ph = beat * tempo
+      const walk = Math.sin(ph * 0.5) * 6
+      const hop = -Math.abs(Math.sin(ph)) * 4
+      const sway = Math.sin(ph * 0.5 + 0.5) * 6
+      const sx = 1 - Math.sin(ph * 2) * 0.03
+      const sy = 1 + Math.sin(ph * 2) * 0.04
+      bodyTransform = `translate(${(64 + walk).toFixed(2)} ${(32 + hop).toFixed(2)}) scale(${sx.toFixed(3)} ${sy.toFixed(3)}) rotate(${sway.toFixed(2)}) translate(-64 -32)`
+    } else {
+      const breatheRate = cfg.breatheSlow ? 0.4 : 0.7
+      const breathe = cfg.breathe ? 1 + Math.sin(t * breatheRate * animSpeed * Math.PI) * 0.012 : 1
+      const bounce = cfg.bounce ? Math.sin(t * 3 * animSpeed) * 0.6 : 0
+      const wobble = cfg.wobble ? Math.sin(t * 2 * animSpeed) * 3 : 0
+      bodyTransform = `translate(64 ${32 + bounce}) scale(${breathe}) rotate(${wobble}) translate(-64 -32)`
+    }
   }
 
-  const tilt = cfg.tilt + (cfg.microTilt ? microTilt : 0)
+  let tilt = cfg.tilt + (cfg.microTilt ? microTilt : 0)
+  if (animate && cfg.dance) {
+    tilt += Math.sin(t * animSpeed * 2.4 + 0.8) * 5
+  }
 
   return (
     <svg

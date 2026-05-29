@@ -69,6 +69,8 @@ export default function Home() {
 
   const [activeMiawState, setActiveMiawState] = useState<keyof typeof STATES>("idleCalm")
   const radioRef = useRef<RadioPlayerHandle>(null)
+  const isRadioPlayingRef = useRef(false)
+  const isLoadingRef = useRef(false)
   const [animSpeed, setAnimSpeed] = useState(1.0)
   const [animate, setAnimate] = useState(true)
 
@@ -107,6 +109,32 @@ export default function Home() {
   const [ttsSupported, setTtsSupported] = useState(true)
   const [voicesLoaded, setVoicesLoaded] = useState(false)
   const isSpeakingRef = useRef(false)
+
+  // State dasar Miaw: menari saat radio nyala, kalau tidak idle.
+  const restingState = useCallback(
+    (): keyof typeof STATES => (isRadioPlayingRef.current ? "dancing" : "idleCalm"),
+    []
+  )
+  const restingStateRef = useRef(restingState)
+  useEffect(() => {
+    restingStateRef.current = restingState
+  }, [restingState])
+
+  useEffect(() => {
+    isLoadingRef.current = isLoading
+  }, [isLoading])
+
+  // Status playing radio menentukan state dasar (dancing/idle) tanpa mengganggu
+  // ekspresi interaksi yang sedang tampil.
+  const handleRadioPlayingChange = useCallback((playing: boolean) => {
+    isRadioPlayingRef.current = playing
+    setActiveMiawState((cur) => {
+      const resting =
+        cur === "idleCalm" || cur === "dancing" || cur === "sleeping" || cur === "grooming"
+      if (!resting) return cur
+      return playing ? "dancing" : "idleCalm"
+    })
+  }, [])
 
   // Sync state to ESP32 OLED (Hybrid)
   useEffect(() => {
@@ -173,6 +201,8 @@ export default function Home() {
 
         recognitionRef.current.onstart = () => {
           setIsListening(true)
+          // Ekspresi listening hanya saat sedang istirahat (idle/dancing).
+          setActiveMiawState((cur) => (cur === "idleCalm" || cur === "dancing") ? "listening" : cur)
         }
 
         recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
@@ -199,6 +229,8 @@ export default function Home() {
 
         recognitionRef.current.onend = () => {
           setIsListening(false)
+          // Selesai menangkap tanpa lanjut ke interaksi: kembali ke resting.
+          setActiveMiawState((cur) => cur === "listening" ? restingStateRef.current() : cur)
           // Auto-restart if continuous mode is on AND Miaw is NOT speaking
           if (isContinuousMicRef.current && !isSpeakingRef.current) {
             setTimeout(() => {
@@ -232,6 +264,9 @@ export default function Home() {
   const resetInactivityTimers = useCallback(() => {
     if (groomingTimeoutRef.current) clearTimeout(groomingTimeoutRef.current)
     if (sleepingTimeoutRef.current) clearTimeout(sleepingTimeoutRef.current)
+
+    // Jangan biarkan Miaw melamun/tidur selama radio nyala atau chat berlangsung.
+    if (isRadioPlayingRef.current || isLoadingRef.current) return
 
     const groomingTime = Math.floor(Math.random() * 2000) + 3000
     groomingTimeoutRef.current = setTimeout(() => {
@@ -334,12 +369,12 @@ export default function Home() {
       if (targetExpression && STATES[targetExpression]) {
         setActiveMiawState(targetExpression)
         expressionTimeoutRef.current = setTimeout(() => {
-          setActiveMiawState("idleCalm")
+          setActiveMiawState(restingState())
           resetInactivityTimers()
           restartMicAfterSpeech()
         }, 2000)
       } else {
-        setActiveMiawState("idleCalm")
+        setActiveMiawState(restingState())
         resetInactivityTimers()
         restartMicAfterSpeech()
       }
@@ -391,18 +426,18 @@ export default function Home() {
         if (targetExpression && STATES[targetExpression]) {
           setActiveMiawState(targetExpression)
         } else {
-          setActiveMiawState("idleCalm")
+          setActiveMiawState(restingState())
         }
-        
+
         expressionTimeoutRef.current = setTimeout(() => {
-          setActiveMiawState("idleCalm")
+          setActiveMiawState(restingState())
           resetInactivityTimers()
           restartMicAfterSpeech()
         }, 2000)
       }
 
       utterance.onerror = () => {
-        setActiveMiawState("idleCalm")
+        setActiveMiawState(restingState())
         resetInactivityTimers()
         restartMicAfterSpeech()
       }
@@ -410,11 +445,11 @@ export default function Home() {
       synth.speak(utterance)
     } catch (err) {
       console.warn("Speech Synthesis failed:", err)
-      setActiveMiawState("idleCalm")
+      setActiveMiawState(restingState())
       resetInactivityTimers()
       restartMicAfterSpeech()
     }
-  }, [isMuted, ttsSupported, voicesLoaded, resetInactivityTimers, playPop, ttsPitch, ttsRate, restartMicAfterSpeech])
+  }, [isMuted, ttsSupported, voicesLoaded, resetInactivityTimers, playPop, ttsPitch, ttsRate, restartMicAfterSpeech, restingState])
 
   const handleSendMessage = useCallback(async (overrideMessage?: string) => {
     const message = (overrideMessage || chatInput).trim()
@@ -549,7 +584,7 @@ export default function Home() {
         isContinuousMicRef.current = false
         isSpeakingRef.current = false
         try { recognitionRef.current?.stop() } catch {}
-        setActiveMiawState("idleCalm")
+        setActiveMiawState(restingState())
         setIsListening(false)
       } else {
         // Turn ON
@@ -562,7 +597,7 @@ export default function Home() {
     } catch (err) {
       console.warn("Failed to toggle speech recognition", err)
     }
-  }, [isContinuousMic, isListening, resetInactivityTimers])
+  }, [isContinuousMic, isListening, resetInactivityTimers, restingState])
 
   const bgColors: Record<keyof typeof STATES, string> = {
     idleCalm: "bg-[#f4f4f0]",
@@ -1020,8 +1055,8 @@ export default function Home() {
           </div>
         )}
 
-        {activeView === "radio" && (
-          <div className="space-y-10">
+        {/* Radio tetap mounted lintas view supaya audio & dancing tidak terputus */}
+        <div className={activeView === "radio" ? "space-y-10" : "hidden"}>
             {/* Internet Radio Player */}
             <section className="flex flex-col items-center">
               <div className="w-full max-w-4xl border-[4px] border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col dark:bg-zinc-900">
@@ -1039,7 +1074,7 @@ export default function Home() {
                     Miaw Radio
                   </h2>
 
-                  <RadioPlayer ref={radioRef} />
+                  <RadioPlayer ref={radioRef} onPlayingChange={handleRadioPlayingChange} />
                 </div>
 
                 <div className="border-t-[3px] border-black/10 pt-4 mt-8">
@@ -1052,8 +1087,7 @@ export default function Home() {
                 </div>
               </div>
             </section>
-          </div>
-        )}
+        </div>
       </main>
 
       {/* Footer */}

@@ -8,7 +8,8 @@ import {
   useEffect,
   useCallback,
 } from "react"
-import { Play, Pause, SkipForward, SkipBack, Volume2, Radio } from "lucide-react"
+import { Play, Pause, SkipForward, SkipBack, Volume2 } from "lucide-react"
+import { Miaw } from "@/components/Miaw"
 
 interface Station {
   name: string
@@ -48,10 +49,11 @@ export interface RadioPlayerHandle {
 
 interface RadioPlayerProps {
   className?: string
+  onPlayingChange?: (playing: boolean) => void
 }
 
 export const RadioPlayer = forwardRef<RadioPlayerHandle, RadioPlayerProps>(
-  function RadioPlayer({ className }, ref) {
+  function RadioPlayer({ className, onPlayingChange }, ref) {
     const audioRef = useRef<HTMLAudioElement>(null)
     const [stationIndex, setStationIndex] = useState(0)
     const [isPlaying, setIsPlaying] = useState(false)
@@ -90,6 +92,10 @@ export const RadioPlayer = forwardRef<RadioPlayerHandle, RadioPlayerProps>(
     useEffect(() => {
       if (audioRef.current) audioRef.current.volume = volume
     }, [volume])
+
+    useEffect(() => {
+      onPlayingChange?.(isPlaying)
+    }, [isPlaying, onPlayingChange])
 
     const play = useCallback(() => {
       isPlayingRef.current = true
@@ -136,7 +142,9 @@ export const RadioPlayer = forwardRef<RadioPlayerHandle, RadioPlayerProps>(
         <div className="border-[4px] border-black bg-black p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_#0b1a2e_0%,_#050912_100%)] pointer-events-none" />
           <div className="relative z-10 flex items-center gap-4 text-[#9ee2ff] drop-shadow-[0_0_4px_#5ec8ff]">
-            <Radio className="size-10 sm:size-12 shrink-0" />
+            <div className="w-24 h-16 shrink-0">
+              <Miaw state={isPlaying ? "dancing" : "idleCalm"} />
+            </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-black uppercase tracking-widest opacity-70">
