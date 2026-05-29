@@ -11,6 +11,7 @@ import { useSFX } from "@/hooks/useSFX"
 import { supabase } from "@/lib/supabaseClient"
 import { isLocalMode } from "@/lib/connectionMode"
 import { LoginScreen } from "@/components/LoginScreen"
+import { LobbyScreen } from "@/components/LobbyScreen"
 import { AUTH_STORAGE_KEY } from "@/lib/auth"
 import Webcam from "react-webcam"
 import {
@@ -47,20 +48,132 @@ interface ChatMessage {
 export default function Home() {
   const [isAuthed, setIsAuthed] = useState(false)
   const [authChecked, setAuthChecked] = useState(false)
+  const [isSessionLocked, setIsSessionLocked] = useState(false)
+  const [activeDeviceName, setActiveDeviceName] = useState<string>("Unknown Device")
 
-  useEffect(() => {
-    setIsAuthed(localStorage.getItem(AUTH_STORAGE_KEY) === "true")
-    setAuthChecked(true)
+  // Generate Device Info
+  const getDeviceInfo = useCallback(() => {
+    let deviceId = localStorage.getItem("miaw_device_id")
+    let deviceName = localStorage.getItem("miaw_device_name")
+    
+    if (!deviceId) {
+      deviceId = `device_${Math.random().toString(36).substring(2, 9)}`
+      const agent = window.navigator.userAgent
+      deviceName = "Unknown Device"
+      if (agent.includes("Windows")) deviceName = "Windows PC"
+      else if (agent.includes("Mac OS")) deviceName = "Mac"
+      else if (agent.includes("iPhone")) deviceName = "iPhone"
+      else if (agent.includes("Android")) deviceName = "Android Phone"
+      
+      localStorage.setItem("miaw_device_id", deviceId)
+      localStorage.setItem("miaw_device_name", deviceName)
+    }
+    return { deviceId, deviceName: deviceName || "Unknown Device" }
   }, [])
 
-  const handleLoginSuccess = useCallback(() => {
+  const claimSession = useCallback(async (deviceId: string, deviceName: string) => {
+    try {
+      await supabase
+        .from("miaw_sessions")
+        .update({
+          active_device_id: deviceId,
+          active_device_name: deviceName,
+          last_active: new Date().toISOString()
+        })
+        .eq("id", 1)
+      setIsSessionLocked(false)
+    } catch (err) {
+      console.error("Failed to claim session:", err)
+    }
+  }, [])
+
+  // 1. Initial Auth Check
+  useEffect(() => {
+    const checkAuthAndSession = async () => {
+      const authed = localStorage.getItem(AUTH_STORAGE_KEY) === "true"
+      setIsAuthed(authed)
+      
+      if (authed) {
+        const { deviceId, deviceName } = getDeviceInfo()
+        
+        // Fetch session
+        const { data, error } = await supabase.from("miaw_sessions").select("*").eq("id", 1).single()
+        
+        if (!error && data) {
+          if (!data.active_device_id || data.active_device_id === "none" || data.active_device_id === deviceId) {
+            // Kita bisa claim session
+            await claimSession(deviceId, deviceName)
+          } else {
+            // Dimiliki orang lain
+            setActiveDeviceName(data.active_device_name)
+            setIsSessionLocked(true)
+          }
+        }
+      }
+      setAuthChecked(true)
+    }
+    checkAuthAndSession()
+  }, [getDeviceInfo, claimSession])
+
+  // 2. Realtime Session Listener & Heartbeat
+  useEffect(() => {
+    if (!isAuthed) return
+
+    const { deviceId } = getDeviceInfo()
+    
+    const channel = supabase
+      .channel('session-lock-changes')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'miaw_sessions', filter: 'id=eq.1' },
+        (payload) => {
+          const newDeviceId = payload.new.active_device_id
+          if (newDeviceId && newDeviceId !== "none" && newDeviceId !== deviceId) {
+            // Seseorang mengambil alih!
+            setActiveDeviceName(payload.new.active_device_name)
+            setIsSessionLocked(true)
+          } else if (newDeviceId === deviceId) {
+            setIsSessionLocked(false)
+          }
+        }
+      )
+      .subscribe()
+
+    // Heartbeat 30 detik
+    const heartbeat = setInterval(() => {
+      if (!isSessionLocked) {
+        supabase.from("miaw_sessions").update({ last_active: new Date().toISOString() }).eq("id", 1).then()
+      }
+    }, 30000)
+
+    return () => {
+      supabase.removeChannel(channel)
+      clearInterval(heartbeat)
+    }
+  }, [isAuthed, isSessionLocked, getDeviceInfo])
+
+  const handleLoginSuccess = useCallback(async () => {
     localStorage.setItem(AUTH_STORAGE_KEY, "true")
     setIsAuthed(true)
-  }, [])
+    
+    const { deviceId, deviceName } = getDeviceInfo()
+    const { data } = await supabase.from("miaw_sessions").select("*").eq("id", 1).single()
+    if (data && data.active_device_id !== "none" && data.active_device_id !== deviceId) {
+      setActiveDeviceName(data.active_device_name)
+      setIsSessionLocked(true)
+    } else {
+      await claimSession(deviceId, deviceName)
+    }
+  }, [getDeviceInfo, claimSession])
+
+  const handleTakeOver = useCallback(() => {
+    const { deviceId, deviceName } = getDeviceInfo()
+    claimSession(deviceId, deviceName)
+  }, [getDeviceInfo, claimSession])
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem(AUTH_STORAGE_KEY)
     setIsAuthed(false)
+    // Kosongkan sesi agar orang lain bisa masuk
+    supabase.from("miaw_sessions").update({ active_device_id: "none", active_device_name: "none" }).eq("id", 1).then()
   }, [])
 
   const { playClick, playPop } = useSFX()
@@ -614,6 +727,10 @@ export default function Home() {
 
   if (!isAuthed) {
     return <LoginScreen onSuccess={handleLoginSuccess} />
+  }
+
+  if (isSessionLocked) {
+    return <LobbyScreen activeDeviceName={activeDeviceName} onTakeOver={handleTakeOver} />
   }
 
   return (
