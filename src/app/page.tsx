@@ -139,16 +139,36 @@ export default function Home() {
       )
       .subscribe()
 
-    // Heartbeat 30 detik
-    const heartbeat = setInterval(() => {
-      if (!isSessionLocked) {
-        supabase.from("miaw_sessions").update({ last_active: new Date().toISOString() }).eq("id", 1).then()
-      }
-    }, 30000)
+    let tickCount = 0
+    // Fallback polling 3 detik & Heartbeat
+    const sessionCheck = setInterval(async () => {
+      try {
+        const { data } = await supabase.from("miaw_sessions").select("active_device_id, active_device_name").eq("id", 1).single()
+        if (data) {
+          const currentOwner = data.active_device_id
+          if (currentOwner && currentOwner !== "none" && currentOwner !== deviceId) {
+            // Orang lain mengambil alih
+            setActiveDeviceName(data.active_device_name)
+            if (!isSessionLocked) setIsSessionLocked(true)
+          } else if (currentOwner === deviceId) {
+            // Kita yang pegang sesi
+            if (isSessionLocked) setIsSessionLocked(false)
+            tickCount++
+            if (tickCount >= 10) { // Heartbeat 30 detik (10 x 3)
+              tickCount = 0
+              supabase.from("miaw_sessions").update({ last_active: new Date().toISOString() }).eq("id", 1).then()
+            }
+          } else if (currentOwner === "none") {
+            // Sesi kosong
+            if (isSessionLocked) setIsSessionLocked(false)
+          }
+        }
+      } catch (err) {}
+    }, 3000)
 
     return () => {
       supabase.removeChannel(channel)
-      clearInterval(heartbeat)
+      clearInterval(sessionCheck)
     }
   }, [isAuthed, isSessionLocked, getDeviceInfo])
 
