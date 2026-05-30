@@ -13,6 +13,7 @@ import { isLocalMode } from "@/lib/connectionMode"
 import { LoginScreen } from "@/components/LoginScreen"
 import { LobbyScreen } from "@/components/LobbyScreen"
 import { GamingOverlay } from "@/components/GamingOverlay"
+import { getMqttClient, MQTT_BASE_TOPIC } from "@/lib/mqttClient"
 import { AUTH_STORAGE_KEY } from "@/lib/auth"
 import Webcam from "react-webcam"
 import { AnimatePresence } from "framer-motion"
@@ -280,10 +281,10 @@ export default function Home() {
         body: activeMiawState
       }).catch(() => {})
     } else {
-      supabase.from("miaw_commands").insert({
-        endpoint: `/state?val=${activeMiawState}`,
-        status: "pending"
-      }).then()
+      const client = getMqttClient()
+      if (client) {
+        client.publish(`${MQTT_BASE_TOPIC}/commands`, `/state?val=${activeMiawState}`)
+      }
     }
   }, [activeMiawState])
 
@@ -295,10 +296,10 @@ export default function Home() {
         body: showDashboard ? "1" : "0"
       }).catch(() => {})
     } else {
-      supabase.from("miaw_commands").insert({
-        endpoint: `/dash?val=${showDashboard ? "1" : "0"}`,
-        status: "pending"
-      }).then()
+      const client = getMqttClient()
+      if (client) {
+        client.publish(`${MQTT_BASE_TOPIC}/commands`, `/dash?val=${showDashboard ? "1" : "0"}`)
+      }
     }
   }, [showDashboard])
 
@@ -442,10 +443,10 @@ export default function Home() {
           method: "POST",
         })
       } else {
-        await supabase.from("miaw_commands").insert({
-          endpoint,
-          status: "pending"
-        })
+        const client = getMqttClient()
+        if (client) {
+          client.publish(`${MQTT_BASE_TOPIC}/commands`, endpoint)
+        }
       }
     } catch {
       // ESP32 may be unreachable; silently fail
@@ -467,10 +468,10 @@ export default function Home() {
           method: "POST",
         })
       } else {
-        await supabase.from("miaw_commands").insert({
-          endpoint,
-          status: "pending"
-        })
+        const client = getMqttClient()
+        if (client) {
+          client.publish(`${MQTT_BASE_TOPIC}/commands`, endpoint)
+        }
       }
     } catch (err) {
       console.warn(`Manual toggle failed for ${lampId}:`, err)

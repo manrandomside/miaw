@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { isLocalMode } from "@/lib/connectionMode"
+import { getMqttClient, MQTT_BASE_TOPIC } from "@/lib/mqttClient"
 
 // Ambang batas kebaruan data: perangkat dianggap offline bila baris telemetri
 // terakhir di-update lebih dari 30 detik lalu (ESP32 update tiap ~10 detik).
@@ -113,63 +114,53 @@ export function useTelemetry() {
       }
     }
 
-    const fetchCloud = async () => {
-      try {
-        const { data: row, error } = await supabase
-          .from("miaw_telemetry")
-          .select("*")
-          .eq("id", 1)
-          .single()
-        if (error) throw error
-        if (row) {
-          setData(mapRow(row))
-          setIsError(false)
-          setIsOffline(false)
-          trackUpdatedAt(row)
-          evaluateOnline()
+    const client = getMqttClient()
+    if (client) {
+      client.subscribe(`${MQTT_BASE_TOPIC}/telemetry`)
+      
+      const handleMessage = (topic: string, message: Buffer) => {
+        if (topic === `${MQTT_BASE_TOPIC}/telemetry`) {
+          try {
+            const parsed = JSON.parse(message.toString())
+            // Sesuaikan payload ESP32 JSON dengan TelemetryData
+            const mapped: TelemetryData = {
+              temperature: parsed.temperature,
+              humidity: parsed.humidity,
+              ldr: parsed.ldr,
+              lamps: {
+                lamp1: parsed.lamps?.lamp1 || false,
+                lamp2: parsed.lamps?.lamp2 || false,
+                lamp3: parsed.lamps?.lamp3 || false,
+              },
+              state: parsed.state
+            }
+            setData(mapped)
+            setIsError(false)
+            setIsOffline(false)
+            
+            const now = Date.now()
+            lastSeenRef.current = now
+            setLastSeen(now)
+            evaluateOnline()
+          } catch (e) {
+            console.error("Failed to parse telemetry via MQTT", e)
+          }
         }
-      } catch (err) {
-        console.error("[useTelemetry] Cloud fetch failed:", err)
-        setIsError(true)
-        setIsOffline(true)
-        setIsOnline(false)
+      }
+
+      client.on('message', handleMessage)
+
+      // Fallback cleanup
+      const livenessTick = setInterval(evaluateOnline, TICK)
+
+      return () => {
+        client.off('message', handleMessage)
+        client.unsubscribe(`${MQTT_BASE_TOPIC}/telemetry`)
+        clearInterval(livenessTick)
       }
     }
 
-    fetchCloud()
-
-    // Supabase Realtime subscription
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'miaw_telemetry',
-          filter: 'id=eq.1'
-        },
-        (payload) => {
-          const row = payload.new as TelemetryRow
-          setData(mapRow(row))
-          setIsError(false)
-          setIsOffline(false)
-          trackUpdatedAt(row)
-          evaluateOnline()
-        }
-      )
-      .subscribe()
-
-    // Fallback polling setiap 3 detik
-    const interval = setInterval(fetchCloud, 3000)
-    // Tick liveness: re-evaluasi online walau tak ada data baru masuk
-    const livenessTick = setInterval(evaluateOnline, TICK)
-
-    return () => {
-      supabase.removeChannel(channel)
-      clearInterval(interval)
-      clearInterval(livenessTick)
-    }
+    return () => {}
   }, [])
 
   return { data, isError, isOffline, isOnline, lastSeen }
