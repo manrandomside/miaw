@@ -978,46 +978,24 @@ export default function Home() {
                   )}
 
                   {/* Manual State Triggers & Settings */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-black text-sm uppercase tracking-wider text-black dark:text-white">
-                        Manual State Triggers
-                      </h3>
-                      {ttsSupported && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setIsMuted(!isMuted)}
-                          className={`font-black text-xs px-3 border-[2px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
-                            isMuted 
-                              ? "bg-zinc-200 text-black hover:bg-zinc-300 dark:bg-zinc-700 dark:text-white dark:hover:bg-zinc-600" 
-                              : "bg-[#4ade80] text-black hover:bg-[#22c55e]"
-                          }`}
-                          title={isMuted ? "Unmute Voice" : "Mute Voice"}
-                        >
-                          {isMuted ? <VolumeX className="size-4 mr-2" /> : <Volume2 className="size-4 mr-2" />}
-                          {isMuted ? "Voice Muted" : "Voice On"}
-                        </Button>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {(Object.keys(STATES) as Array<keyof typeof STATES>).map((stateKey) => {
-                        const isSelected = activeMiawState === stateKey
-                        return (
-                          <Button
-                            key={stateKey}
-                            variant={isSelected ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setActiveMiawState(stateKey)}
-                            className={`font-black text-xs tracking-wide border-[2px] border-black ${
-                              isSelected ? "bg-[#ffde43] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" : "shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                            }`}
-                          >
-                            {STATES[stateKey].short}
-                          </Button>
-                        )
-                      })}
-                    </div>
+                  {/* Voice Settings */}
+                  <div className="flex justify-end">
+                    {ttsSupported && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsMuted(!isMuted)}
+                        className={`font-black text-xs px-3 border-[2px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+                          isMuted 
+                            ? "bg-zinc-200 text-black hover:bg-zinc-300 dark:bg-zinc-700 dark:text-white dark:hover:bg-zinc-600" 
+                            : "bg-[#4ade80] text-black hover:bg-[#22c55e]"
+                        }`}
+                        title={isMuted ? "Unmute Voice" : "Mute Voice"}
+                      >
+                        {isMuted ? <VolumeX className="size-4 mr-2" /> : <Volume2 className="size-4 mr-2" />}
+                        {isMuted ? "Voice Muted" : "Voice On"}
+                      </Button>
+                    )}
                   </div>
                 </div>
                 
@@ -1074,7 +1052,7 @@ export default function Home() {
                       onClick={() => setShowExpressionsTray(!showExpressionsTray)}
                       className={`font-black text-xs px-4 ml-2 border-[2px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${showExpressionsTray ? "bg-[#fca5a5] text-black" : "hover:bg-zinc-100"}`}
                     >
-                      🎭 Expressions
+                      Expressions
                     </Button>
                   </div>
                 </div>
@@ -1256,7 +1234,6 @@ export default function Home() {
           <span className="text-black dark:text-white">&copy; 2026 Miaw Smart Home Hub.</span>
           <div className="flex gap-4 opacity-75">
             <span className="text-black dark:text-white">ESP32 Telemetry Linked</span>
-            <span className="text-black dark:text-white">Groq AI Powered</span>
           </div>
         </div>
       </footer>
@@ -1298,7 +1275,7 @@ export default function Home() {
               <h3 className="font-black uppercase text-sm text-black dark:text-white">Swipe to test expressions</h3>
               <button onClick={() => setShowExpressionsTray(false)} className="text-black dark:text-white font-black px-2 py-1 border-[2px] border-black bg-white hover:bg-zinc-200 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none transition-all">CLOSE</button>
             </div>
-            <div className="flex overflow-x-auto snap-x gap-4 pb-4 pt-2">
+            <div className="flex overflow-x-auto gap-4 pb-4 pt-2" style={{ WebkitOverflowScrolling: 'touch' }}>
               {Object.keys(STATES).filter(k => k !== "gaming").map((stateKey) => (
                 <button
                   key={stateKey}
@@ -1306,7 +1283,7 @@ export default function Home() {
                     setActiveMiawState(stateKey as keyof typeof STATES)
                     resetInactivityTimers()
                   }}
-                  className={`snap-start whitespace-nowrap font-black text-sm px-6 py-4 border-[3px] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] uppercase shrink-0 transition-transform active:translate-x-[2px] active:translate-y-[2px] active:shadow-none
+                  className={`whitespace-nowrap font-black text-sm px-6 py-4 border-[3px] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] uppercase shrink-0 transition-transform active:translate-x-[2px] active:translate-y-[2px] active:shadow-none
                     ${activeMiawState === stateKey 
                       ? "bg-black text-white dark:bg-zinc-200 dark:text-black translate-x-[2px] translate-y-[2px] !shadow-none" 
                       : "bg-white text-black hover:bg-zinc-100"}`}
