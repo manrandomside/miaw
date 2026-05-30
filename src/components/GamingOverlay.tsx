@@ -39,7 +39,7 @@ export function GamingOverlay() {
         </div>
 
         <div className="animate-bounce">
-          <span className="inline-block bg-[#ffde43] text-black border-[3px] border-black px-6 py-3 font-black uppercase text-sm shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <span className="inline-flex bg-[#ffde43] text-black border-[3px] border-black px-3 sm:px-6 py-2 sm:py-3 font-black uppercase text-[10px] sm:text-sm shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-center">
             Press BLUE button on ESP32 to unlock
           </span>
         </div>

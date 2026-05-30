@@ -163,7 +163,7 @@ export const RadioPlayer = forwardRef<RadioPlayerHandle, RadioPlayerProps>(
         </div>
 
         {/* Controls */}
-        <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="mt-4 flex flex-wrap items-center gap-2 sm:gap-3">
           <button
             onClick={prev}
             title="Stasiun sebelumnya"
@@ -188,8 +188,8 @@ export const RadioPlayer = forwardRef<RadioPlayerHandle, RadioPlayerProps>(
             <SkipForward className="size-5" />
           </button>
 
-          <div className="flex items-center gap-2 border-[3px] border-black bg-white px-3 py-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] ml-auto dark:bg-zinc-800">
-            <Volume2 className="size-5 text-black dark:text-white" />
+          <div className="flex w-full sm:w-auto items-center justify-between sm:justify-start gap-2 border-[3px] border-black bg-white px-3 py-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sm:ml-auto mt-2 sm:mt-0 dark:bg-zinc-800">
+            <Volume2 className="size-5 text-black dark:text-white shrink-0" />
             <input
               type="range"
               min="0"
@@ -197,7 +197,7 @@ export const RadioPlayer = forwardRef<RadioPlayerHandle, RadioPlayerProps>(
               step="0.05"
               value={volume}
               onChange={(e) => setVolume(parseFloat(e.target.value))}
-              className="w-24 sm:w-32 accent-black dark:accent-white"
+              className="w-full sm:w-32 accent-black dark:accent-white"
               title="Volume"
             />
           </div>

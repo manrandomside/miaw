@@ -955,7 +955,7 @@ export default function Home() {
                             <span className="font-black uppercase text-[10px] opacity-60">
                               {msg.role === "user" ? "YOU" : "MIAW"}
                             </span>
-                            <span className="ml-2 font-bold">{msg.text}</span>
+                            <span className="ml-2 font-bold break-words">{msg.text}</span>
                             {msg.actionFired && (
                               <span className="ml-2 inline-flex items-center gap-1 text-[10px] text-green-700 dark:text-green-400 font-bold bg-green-100 border-[2px] border-green-800 px-1 py-0.5">
                                 <Zap className="size-3" />
@@ -1022,10 +1022,10 @@ export default function Home() {
                 {/* Speed sliders & Toggles */}
                 <div className="border-t-[3px] border-black/10 pt-4 mt-6 flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <Sliders className="size-4 text-black dark:text-white" />
+                    <Sliders className="size-4 text-black dark:text-white shrink-0" />
                     <span className="font-bold text-xs uppercase text-black dark:text-white">Speed multiplier</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
                       variant={animSpeed === 0.5 ? "default" : "outline"}
                       size="sm"
@@ -1209,13 +1209,13 @@ export default function Home() {
         <div className={activeView === "radio" ? "space-y-10" : "hidden"}>
             {/* Internet Radio Player */}
             <section className="flex flex-col items-center">
-              <div className="w-full max-w-4xl border-[4px] border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col dark:bg-zinc-900">
+              <div className="w-full max-w-4xl border-[4px] border-black bg-white p-4 sm:p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col dark:bg-zinc-900">
                 <div className="space-y-6">
-                  <div className="flex justify-between items-center">
-                    <span className="border-[3px] border-black bg-[#60a5fa] text-black px-3 py-1 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2 sm:gap-0">
+                    <span className="border-[3px] border-black bg-[#60a5fa] text-black px-3 py-1 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-center w-full sm:w-auto">
                       Internet Radio Player
                     </span>
-                    <span className="text-xs font-mono font-black uppercase text-zinc-500">
+                    <span className="text-xs font-mono font-black uppercase text-zinc-500 text-center w-full sm:w-auto">
                       SomaFM Stream
                     </span>
                   </div>
