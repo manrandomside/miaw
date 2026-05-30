@@ -233,6 +233,7 @@ export default function Home() {
   const [ttsPitch, setTtsPitch] = useState(1.4)
   const [ttsRate, setTtsRate] = useState(1.05)
   const [showSettings, setShowSettings] = useState(false)
+  const [showExpressionsTray, setShowExpressionsTray] = useState(false)
 
   // Speech Recognition (STT) State
   const [isListening, setIsListening] = useState(false)
@@ -1067,32 +1068,15 @@ export default function Home() {
                     >
                       {showDashboard ? "Hide Sensors" : "Show Sensors"}
                     </Button>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Manual Expression Triggers */}
-            <section className="flex flex-col items-center">
-              <div className="w-full max-w-4xl border-[4px] border-black bg-[#fca5a5] p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:bg-red-900">
-                <h3 className="font-black uppercase text-sm mb-3 border-b-[2px] border-black pb-1 text-black dark:text-white">Manual Expressions (Testing)</h3>
-                <div className="flex flex-wrap gap-2">
-                  {Object.keys(STATES).map((stateKey) => (
                     <Button
-                      key={stateKey}
+                      variant={showExpressionsTray ? "default" : "outline"}
                       size="sm"
-                      onClick={() => {
-                        setActiveMiawState(stateKey as keyof typeof STATES)
-                        resetInactivityTimers()
-                      }}
-                      className={`font-black text-[10px] sm:text-xs px-3 border-[2px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] uppercase
-                        ${activeMiawState === stateKey 
-                          ? "bg-black text-white dark:bg-white dark:text-black" 
-                          : "bg-white text-black hover:bg-zinc-100"}`}
+                      onClick={() => setShowExpressionsTray(!showExpressionsTray)}
+                      className={`font-black text-xs px-4 ml-2 border-[2px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${showExpressionsTray ? "bg-[#fca5a5] text-black" : "hover:bg-zinc-100"}`}
                     >
-                      {STATES[stateKey as keyof typeof STATES].short}
+                      🎭 Expressions
                     </Button>
-                  ))}
+                  </div>
                 </div>
               </div>
             </section>
@@ -1304,6 +1288,36 @@ export default function Home() {
           </div>
         </div>
       )}
+      {/* Expressions Tray */}
+      <div 
+        className={`fixed inset-x-0 bottom-0 z-[100] transition-transform duration-300 ease-in-out ${showExpressionsTray ? "translate-y-0" : "translate-y-full"}`}
+      >
+        <div className="bg-[#fca5a5] border-t-[4px] border-black p-4 pb-8 shadow-[0px_-4px_0px_0px_rgba(0,0,0,1)] dark:bg-red-900">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex justify-between items-center mb-4 border-b-[2px] border-black pb-2">
+              <h3 className="font-black uppercase text-sm text-black dark:text-white">Swipe to test expressions</h3>
+              <button onClick={() => setShowExpressionsTray(false)} className="text-black dark:text-white font-black px-2 py-1 border-[2px] border-black bg-white hover:bg-zinc-200 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none transition-all">CLOSE</button>
+            </div>
+            <div className="flex overflow-x-auto snap-x gap-4 pb-4 pt-2">
+              {Object.keys(STATES).filter(k => k !== "gaming").map((stateKey) => (
+                <button
+                  key={stateKey}
+                  onClick={() => {
+                    setActiveMiawState(stateKey as keyof typeof STATES)
+                    resetInactivityTimers()
+                  }}
+                  className={`snap-start whitespace-nowrap font-black text-sm px-6 py-4 border-[3px] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] uppercase shrink-0 transition-transform active:translate-x-[2px] active:translate-y-[2px] active:shadow-none
+                    ${activeMiawState === stateKey 
+                      ? "bg-black text-white dark:bg-zinc-200 dark:text-black translate-x-[2px] translate-y-[2px] !shadow-none" 
+                      : "bg-white text-black hover:bg-zinc-100"}`}
+                >
+                  {STATES[stateKey as keyof typeof STATES].short}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     </>
   )
