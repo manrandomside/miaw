@@ -13,7 +13,7 @@ export function LandingPage({ onLoginClick }: LandingPageProps) {
   const { playClick } = useSFX()
 
   return (
-    <div className="min-h-screen bg-[#ffde43] font-sans selection:bg-black selection:text-white">
+    <div className="min-h-screen bg-[#ffde43] font-sans selection:bg-black selection:text-white overflow-x-hidden">
       {/* Background Pattern */}
       <div
         className="fixed inset-0 opacity-[0.06] pointer-events-none"
@@ -76,7 +76,7 @@ export function LandingPage({ onLoginClick }: LandingPageProps) {
               </span>
             </h2>
             <p className="text-xl font-bold max-w-xl text-black/80">
-              Lebih dari sekadar layar pintar. Miaw adalah asisten rumah berbasis Neo-Brutalism dengan integrasi ESP32 dan LLM yang interaktif, ekspresif, dan hidup.
+              Lebih dari sekadar layar pintar. Miaw adalah asisten rumah interaktif dengan integrasi sensor cerdas, fitur mini-games, pemutar radio FM, dan otak LLM yang ekspresif serta hidup.
             </p>
             <button
               onClick={() => { playClick(); onLoginClick(); }}
