@@ -13,6 +13,7 @@ import { isLocalMode } from "@/lib/connectionMode"
 import { LoginScreen } from "@/components/LoginScreen"
 import { LobbyScreen } from "@/components/LobbyScreen"
 import { GamingOverlay } from "@/components/GamingOverlay"
+import { LandingPage } from "@/components/LandingPage"
 import { getMqttClient, MQTT_BASE_TOPIC } from "@/lib/mqttClient"
 import { AUTH_STORAGE_KEY } from "@/lib/auth"
 import Webcam from "react-webcam"
@@ -193,8 +194,14 @@ export default function Home() {
   }, [getDeviceInfo, claimSession])
 
   const handleLogout = useCallback(() => {
+    setShowLogoutConfirm(true)
+  }, [])
+
+  const confirmLogout = useCallback(() => {
     localStorage.removeItem(AUTH_STORAGE_KEY)
     setIsAuthed(false)
+    setShowLogin(false)
+    setShowLogoutConfirm(false)
     // Kosongkan sesi agar orang lain bisa masuk
     supabase.from("miaw_sessions").update({ active_device_id: "none", active_device_name: "none" }).eq("id", 1).then()
   }, [])
@@ -209,6 +216,8 @@ export default function Home() {
   const isLoadingRef = useRef(false)
   const [animSpeed, setAnimSpeed] = useState(1.0)
   const [animate, setAnimate] = useState(true)
+  const [showLogin, setShowLogin] = useState(false)
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
 
   const webcamRef = useRef<Webcam>(null)
   const [isVisionActive, setIsVisionActive] = useState(false)
@@ -754,7 +763,10 @@ export default function Home() {
   if (!authChecked) return null
 
   if (!isAuthed) {
-    return <LoginScreen onSuccess={handleLoginSuccess} />
+    if (showLogin) {
+      return <LoginScreen onSuccess={handleLoginSuccess} onBack={() => setShowLogin(false)} />
+    }
+    return <LandingPage onLoginClick={() => setShowLogin(true)} />
   }
 
   if (isSessionLocked) {
@@ -830,9 +842,6 @@ export default function Home() {
                   <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2 sm:gap-0">
                     <span className="border-[3px] border-black bg-[#ffde43] text-black px-3 py-1 text-xs font-black uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                       AI Assistant Mascot
-                    </span>
-                    <span className="text-xs font-mono font-black uppercase text-zinc-500">
-                      Groq LLM Brain
                     </span>
                   </div>
 
@@ -1295,6 +1304,35 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* Logout Confirmation Dialog */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white border-[4px] border-black p-6 w-full max-w-md shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:bg-zinc-900">
+            <h2 className="text-2xl font-black uppercase mb-4 border-b-[3px] border-black pb-2 text-black dark:text-white flex items-center gap-2">
+              <LogOut className="size-6 text-red-500" />
+              Keluar Sesi
+            </h2>
+            <p className="font-bold text-black dark:text-white mb-8">
+              Apakah Anda yakin ingin mengakhiri sesi ini? Perangkat lain akan dapat mengambil alih kontrol Miaw.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <button 
+                onClick={() => setShowLogoutConfirm(false)} 
+                className="flex-1 bg-white border-[3px] border-black px-4 py-3 font-black uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all text-black hover:bg-zinc-100"
+              >
+                Batal
+              </button>
+              <button 
+                onClick={confirmLogout} 
+                className="flex-1 bg-red-500 border-[3px] border-black px-4 py-3 font-black uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all text-white hover:bg-red-600"
+              >
+                Ya, Keluar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
     </>
   )

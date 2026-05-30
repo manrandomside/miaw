@@ -1,17 +1,20 @@
 "use client"
 
 import { useState } from "react"
-import { Cat, Lock, User, ArrowRight } from "lucide-react"
+import { Lock, User, ArrowRight, Eye, EyeOff, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Miaw } from "@/components/Miaw"
 import { MIAW_CREDENTIALS } from "@/lib/auth"
 
 interface LoginScreenProps {
   onSuccess: () => void
+  onBack?: () => void
 }
 
-export function LoginScreen({ onSuccess }: LoginScreenProps) {
+export function LoginScreen({ onSuccess, onBack }: LoginScreenProps) {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -39,8 +42,10 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
 
       <div className="relative w-full max-w-sm border-[4px] border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
         <div className="flex items-center gap-3 border-b-[4px] border-black pb-4 mb-6">
-          <div className="bg-black border-[3px] border-black p-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] w-12 h-12 flex items-center justify-center">
-            <Cat className="size-7 text-[#ffde43]" />
+          <div className="bg-black border-[3px] border-black p-0 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] w-12 h-12 flex items-center justify-center overflow-hidden">
+            <div className="w-[130%] h-[130%] text-[#ffde43] flex items-center justify-center pt-2">
+              <Miaw state="idleCalm" animSpeed={1} animate={true} />
+            </div>
           </div>
           <div>
             <h1 className="font-black text-2xl uppercase tracking-wider text-black leading-none">
@@ -77,12 +82,19 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
             <div className="flex items-center border-[3px] border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] focus-within:bg-[#fffef5]">
               <Lock className="size-5 mx-3 text-black shrink-0" />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="********"
-                className="flex-1 w-full min-w-0 bg-transparent py-2.5 pr-3 text-base font-bold text-black placeholder:text-zinc-400 focus:outline-none"
+                className="flex-1 w-full min-w-0 bg-transparent py-2.5 px-0 text-base font-bold text-black placeholder:text-zinc-400 focus:outline-none"
               />
+              <button 
+                type="button" 
+                onClick={() => setShowPassword(!showPassword)}
+                className="mx-3 text-zinc-500 hover:text-black focus:outline-none"
+              >
+                {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+              </button>
             </div>
           </div>
 
@@ -92,10 +104,24 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
             </p>
           )}
 
-          <Button type="submit" className="w-full h-12 text-base gap-2">
-            Masuk
-            <ArrowRight className="size-5" />
-          </Button>
+          <div className="space-y-3 pt-2">
+            <Button type="submit" className="w-full h-12 text-base gap-2">
+              Masuk
+              <ArrowRight className="size-5" />
+            </Button>
+            
+            {onBack && (
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={onBack}
+                className="w-full h-12 text-base gap-2 border-[3px] border-black bg-[#e2e8f0] text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-zinc-200"
+              >
+                <ArrowLeft className="size-5" />
+                Kembali
+              </Button>
+            )}
+          </div>
         </form>
 
         <p className="mt-5 text-center text-[10px] font-black uppercase tracking-widest text-zinc-400">
