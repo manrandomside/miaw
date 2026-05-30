@@ -47,7 +47,7 @@ You MUST respond with ONLY a valid JSON object. No markdown code fences, no intr
 JSON schema:
 {
   "reply": "string - Your verbal response in Indonesian. Keep it concise, under 2 sentences.",
-  "expression": "string - Must be exactly one of: idleCalm, listening, thinking, speaking, happy, confused, sleeping, grooming",
+  "expression": "string - Must be exactly one of: idleCalm, listening, thinking, speaking, happy, confused, sleeping, grooming, angry, scared, love, dizzy, hungry",
   "action": {
     "endpoint": "string or null - The ESP32 endpoint path like /bedroom, /kitchen, /bathroom, /all, /auto, or null if no hardware action is needed",
     "method": "string - POST or GET"
@@ -255,6 +255,7 @@ export async function POST(request: NextRequest) {
     const validExpressions = [
       "idleCalm", "listening", "thinking", "speaking",
       "happy", "confused", "sleeping", "grooming",
+      "angry", "scared", "love", "dizzy", "hungry"
     ]
     if (!validExpressions.includes(parsed.expression)) {
       parsed.expression = "speaking"

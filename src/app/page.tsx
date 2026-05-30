@@ -416,7 +416,8 @@ export default function Home() {
       })
     }, groomingTime)
 
-    const sleepingTime = Math.floor(Math.random() * 1000) + 9000
+    // Memperlama waktu masuk ke mode tidur (30-45 detik) agar animasi idle lebih sering muncul
+    const sleepingTime = Math.floor(Math.random() * 15000) + 30000
     sleepingTimeoutRef.current = setTimeout(() => {
       setActiveMiawState((current) => {
         if (current === "idleCalm") {

@@ -17,12 +17,12 @@ export interface StateConfig {
   desc: string
   trigger: string
   anim: string
-  eyes: "open" | "wide" | "halfClosed" | "lookUpRight" | "happy" | "spiral" | "sleep"
-  mouth: "omega" | "smileBig" | "speak" | "oOpen" | "sleepSmile" | "frown" | null
-  paws: "cheekRight" | "chinRest" | "bothUp" | "cupEarRight" | "gestureLowerRight" | "scratchTopRight" | "curledChest" | "earGroomEaster" | null
+  eyes: "open" | "wide" | "halfClosed" | "lookUpRight" | "happy" | "spiral" | "sleep" | "angry" | "scared" | "love" | "dizzy" | "hungry"
+  mouth: "omega" | "smileBig" | "speak" | "oOpen" | "sleepSmile" | "frown" | "tongue" | "sad" | "nervous" | null
+  paws: "cheekRight" | "chinRest" | "bothUp" | "cupEarRight" | "gestureLowerRight" | "scratchTopRight" | "curledChest" | "earGroomEaster" | "facePalm" | "bellyRub" | null
   nose: "tri" | "none"
   tilt: number
-  extras: "listening" | "thinking" | "speaking" | "happy" | "confused" | "sleeping" | "grooming" | "dancing" | null
+  extras: "listening" | "thinking" | "speaking" | "happy" | "confused" | "sleeping" | "grooming" | "dancing" | "angerMark" | "sweat" | "hearts" | null
   blush: number | null
   tail: "sway" | "alert" | "up" | "curled" | "dance" | null
   breathe: boolean
@@ -200,6 +200,26 @@ export const STATES: Record<string, StateConfig> = {
     breathe: false,
     bounce: true,
   },
+  angry: {
+    label: "Angry", short: "Angry", desc: "Mad or annoyed state.", trigger: "Manual.", anim: "Anger mark, shaking",
+    eyes: "angry", mouth: "sad", paws: null, nose: "tri", tilt: -2, extras: "angerMark", blush: null, tail: "alert", breathe: false, wobble: true,
+  },
+  scared: {
+    label: "Scared / Shocked", short: "Scared", desc: "Wide eyes, shivering.", trigger: "Manual.", anim: "Shivering, sweat",
+    eyes: "scared", mouth: "nervous", paws: "curledChest", nose: "tri", tilt: 0, extras: "sweat", blush: null, tail: "curled", breathe: false, wobble: true,
+  },
+  love: {
+    label: "In Love", short: "Love", desc: "Heart eyes, blushing heavily.", trigger: "Manual.", anim: "Floating hearts, swaying",
+    eyes: "love", mouth: "smileBig", paws: "cheekRight", nose: "tri", tilt: 5, extras: "hearts", blush: 3.5, tail: "sway", breathe: true,
+  },
+  dizzy: {
+    label: "Dizzy", short: "Dizzy", desc: "Spinning eyes, wobbly.", trigger: "Manual.", anim: "Wobble, spinning eyes",
+    eyes: "dizzy", mouth: "nervous", paws: "facePalm", nose: "tri", tilt: 8, extras: "sweat", blush: null, tail: null, breathe: false, wobble: true,
+  },
+  hungry: {
+    label: "Hungry", short: "Hungry", desc: "Tongue out, rubbing belly.", trigger: "Manual.", anim: "Tongue out, paw on belly",
+    eyes: "hungry", mouth: "tongue", paws: "bellyRub", nose: "tri", tilt: -3, extras: null, blush: 1.5, tail: "sway", breathe: true,
+  }
 }
 
 function HeadAndEars() {
@@ -368,6 +388,47 @@ function Eyes({ kind, animSpeed = 1, blinkOn = true }: EyesProps) {
           <line x1="81" y1="29.5" x2="83" y2="28" />
         </g>
       )
+    case "angry":
+      return (
+        <g stroke="currentColor" strokeWidth={sw + 0.5} fill="none" strokeLinecap="round">
+          <path d="M 46 28 L 54 32" />
+          <path d="M 82 28 L 74 32" />
+          <circle cx="52" cy="33" r="1.5" fill="currentColor" stroke="none" />
+          <circle cx="76" cy="33" r="1.5" fill="currentColor" stroke="none" />
+        </g>
+      )
+    case "scared":
+      return (
+        <g>
+          <circle cx="52" cy="30" r={EYE_R_WIDE} fill="white" stroke="currentColor" strokeWidth={sw} />
+          <circle cx="76" cy="30" r={EYE_R_WIDE} fill="white" stroke="currentColor" strokeWidth={sw} />
+          <circle cx="52" cy="30" r="1.5" fill="currentColor" />
+          <circle cx="76" cy="30" r="1.5" fill="currentColor" />
+        </g>
+      )
+    case "love":
+      return (
+        <g fill="currentColor" stroke="currentColor" strokeWidth="1" strokeLinejoin="round">
+          <path d="M 52 26 C 48 26, 46 29, 46 31 C 46 34, 52 36, 52 36 C 52 36, 58 34, 58 31 C 58 29, 56 26, 52 26 Z" />
+          <path d="M 76 26 C 72 26, 70 29, 70 31 C 70 34, 76 36, 76 36 C 76 36, 82 34, 82 31 C 82 29, 80 26, 76 26 Z" />
+        </g>
+      )
+    case "dizzy":
+      return (
+        <g stroke="currentColor" strokeWidth={sw} fill="none" strokeLinecap="round">
+          <path d="M 52 30 m -4 0 a 4 4 0 1 1 8 0 a 3 3 0 1 1 -6 0 a 2 2 0 1 1 4 0" />
+          <path d="M 76 30 m -4 0 a 4 4 0 1 1 8 0 a 3 3 0 1 1 -6 0 a 2 2 0 1 1 4 0" />
+        </g>
+      )
+    case "hungry":
+      return (
+        <g>
+          <circle cx="52" cy="30" r={EYE_R_WIDE} fill="currentColor" />
+          <circle cx="76" cy="30" r={EYE_R_WIDE} fill="currentColor" />
+          <circle cx="53.8" cy="28" r={SPARKLE_R + 0.2} fill="white" />
+          <circle cx="77.8" cy="28" r={SPARKLE_R + 0.2} fill="white" />
+        </g>
+      )
     default:
       return null
   }
@@ -416,6 +477,17 @@ function Mouth({ kind, animSpeed = 1 }: MouthProps) {
       return <g {...baseProps}><path d="M 61 38 Q 64 39.5 67 38" /></g>
     case "frown":
       return <g {...baseProps}><path d="M 61 39.5 Q 64 37 67 39.5" /></g>
+    case "sad":
+      return <g {...baseProps}><path d="M 60 40 Q 64 36 68 40" /></g>
+    case "nervous":
+      return <g {...baseProps}><path d="M 60 38 L 62 39 L 64 38 L 66 39 L 68 38" /></g>
+    case "tongue":
+      return (
+        <g {...baseProps}>
+          <path d="M 60 37.5 Q 64 39.5 68 37.5" />
+          <path d="M 62 38 Q 64 44 66 38" fill="currentColor" />
+        </g>
+      )
     default:
       return null
   }
@@ -525,6 +597,24 @@ function Paws({ pose, t, animSpeed, easterPawVisible }: PawsProps) {
           strokeLinecap="round"
           opacity={0.9}
         />
+      </g>
+    )
+  }
+  if (pose === "facePalm") {
+    return (
+      <g stroke="currentColor" strokeWidth={SW_OUTLINE} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M 68 56 Q 72 40 76 28" fill="none" />
+        <circle cx="76" cy="28" r="3" fill="white" />
+      </g>
+    )
+  }
+  if (pose === "bellyRub") {
+    return (
+      <g stroke="currentColor" strokeWidth={SW_OUTLINE} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M 38 56 Q 44 50 50 52" fill="none" />
+        <circle cx="50" cy="52" r="3" fill="white" />
+        <path d="M 90 56 Q 84 50 78 52" fill="none" />
+        <circle cx="78" cy="52" r="3" fill="white" />
       </g>
     )
   }
@@ -713,6 +803,28 @@ function StateExtras({ state, t, animSpeed }: StateExtrasProps) {
       </g>
     )
   }
+  if (state === "angerMark") {
+    return (
+      <g stroke="red" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M 80 12 L 86 12 L 86 18 M 86 12 L 80 18" />
+      </g>
+    )
+  }
+  if (state === "sweat") {
+    return (
+      <g fill="#9ee2ff" stroke="currentColor" strokeWidth="1" transform={`translate(0, ${Math.sin(t*5)*1})`}>
+        <path d="M 34 16 Q 32 20 34 22 Q 36 20 34 16 Z" />
+      </g>
+    )
+  }
+  if (state === "hearts") {
+    return (
+      <g fill="pink" stroke="currentColor" strokeWidth="1" transform={`translate(0, ${-Math.abs(Math.sin(t*3)*3)})`}>
+        <path d="M 34 16 C 30 16, 28 19, 28 21 C 28 24, 34 26, 34 26 C 34 26, 40 24, 40 21 C 40 19, 38 16, 34 16 Z" />
+        <path d="M 94 20 C 90 20, 88 23, 88 25 C 88 28, 94 30, 94 30 C 94 30, 100 28, 100 25 C 100 23, 98 20, 94 20 Z" transform="scale(0.7) translate(30, 10)" />
+      </g>
+    )
+  }
   return null
 }
 
@@ -768,6 +880,66 @@ function useIdleMicroBehavior(active: boolean, animSpeed: number) {
   return { microTilt, easter }
 }
 
+function useMicroExpressions(baseCfg: StateConfig, active: boolean) {
+  const [override, setOverride] = useState<Partial<StateConfig> | null>(null)
+
+  useEffect(() => {
+    if (!active) {
+      setOverride(null)
+      return
+    }
+    
+    let timeoutId: NodeJS.Timeout
+    let clearOverrideId: NodeJS.Timeout
+
+    const scheduleMicro = () => {
+      // Lebih banyak gerakan saat idle
+      const wait = baseCfg.short === "Idle" 
+        ? 2000 + Math.random() * 3000 // tiap 2-5 detik
+        : 4000 + Math.random() * 5000 // tiap 4-9 detik
+        
+      timeoutId = setTimeout(() => {
+        // Pilih aksi acak tergantung state
+        let newOverride: Partial<StateConfig> = {}
+        const r = Math.random()
+        
+        if (baseCfg.short === "Idle") {
+          if (r < 0.2) newOverride = { eyes: "wide", mouth: "oOpen", tail: "alert" }
+          else if (r < 0.4) newOverride = { eyes: "halfClosed", tilt: 5, tail: "curled" }
+          else if (r < 0.6) newOverride = { mouth: "smileBig", paws: "bothUp" }
+          else if (r < 0.8) newOverride = { eyes: "lookUpRight", paws: "chinRest" }
+          else newOverride = { paws: "earGroomEaster", tilt: -5 }
+        } else if (baseCfg.short === "Happy") {
+          if (r < 0.3) newOverride = { eyes: "wide", mouth: "oOpen" }
+          else if (r < 0.6) newOverride = { tail: "dance", bounce: true }
+        } else if (baseCfg.short === "Scared") {
+          newOverride = { eyes: "dizzy", mouth: "sad" }
+        } else if (baseCfg.short === "Angry") {
+          newOverride = { mouth: "frown", tail: "curled" }
+        }
+        
+        setOverride(newOverride)
+        
+        // Hapus override setelah 0.5 - 1.5 detik
+        clearOverrideId = setTimeout(() => {
+          setOverride(null)
+          scheduleMicro()
+        }, 500 + Math.random() * 1000)
+        
+      }, wait)
+    }
+    
+    scheduleMicro()
+    
+    return () => {
+      clearTimeout(timeoutId)
+      clearTimeout(clearOverrideId)
+    }
+  }, [baseCfg.short, active])
+  
+  return override ? { ...baseCfg, ...override } as StateConfig : baseCfg
+}
+
 interface MiawProps {
   state?: keyof typeof STATES
   animSpeed?: number
@@ -775,7 +947,8 @@ interface MiawProps {
 }
 
 export function Miaw({ state = "idleCalm", animSpeed = 1, animate = true }: MiawProps) {
-  const cfg = STATES[state] || STATES.idleCalm
+  const baseCfg = STATES[state] || STATES.idleCalm
+  const cfg = useMicroExpressions(baseCfg, animate)
   const [t, setT] = useState(0)
 
   useEffect(() => {
