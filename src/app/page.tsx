@@ -1072,6 +1072,31 @@ export default function Home() {
               </div>
             </section>
 
+            {/* Manual Expression Triggers */}
+            <section className="flex flex-col items-center">
+              <div className="w-full max-w-4xl border-[4px] border-black bg-[#fca5a5] p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:bg-red-900">
+                <h3 className="font-black uppercase text-sm mb-3 border-b-[2px] border-black pb-1 text-black dark:text-white">Manual Expressions (Testing)</h3>
+                <div className="flex flex-wrap gap-2">
+                  {Object.keys(STATES).map((stateKey) => (
+                    <Button
+                      key={stateKey}
+                      size="sm"
+                      onClick={() => {
+                        setActiveMiawState(stateKey as keyof typeof STATES)
+                        resetInactivityTimers()
+                      }}
+                      className={`font-black text-[10px] sm:text-xs px-3 border-[2px] border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] uppercase
+                        ${activeMiawState === stateKey 
+                          ? "bg-black text-white dark:bg-white dark:text-black" 
+                          : "bg-white text-black hover:bg-zinc-100"}`}
+                    >
+                      {STATES[stateKey as keyof typeof STATES].short}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </section>
+
             {/* Dashboard Grid (ESP32 Live Telemetry) */}
             {showDashboard && (
             <section className="space-y-6">
